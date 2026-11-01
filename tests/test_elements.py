@@ -90,11 +90,12 @@ def test_catalog_cli_mcp_and_packaged_guide_agree(capsys):
 
 
 def test_examples_preflight_and_bojonegoro_preserves_rounded_population():
-    for relative in ('elements.yaml','bojonegoro/episode.yaml'):
+    for relative,total in (('elements.yaml',14),('bojonegoro/episode.yaml',41),
+                           ('elements-refined.yaml',8.4)):
         ep=load_episode(ROOT/'examples'/relative)
         preflight(ep)
         state=build_state(ep,[s.min for s in ep.scenes])
-        assert state.total==(14 if relative=='elements.yaml' else 41)
+        assert state.total==pytest.approx(total)
         # Actually invoke each custom scene once; imports and entry points work.
         for i,duration in enumerate(state.durations):
             assert np.any(np.array(state.paint(i,duration*.8).im)>20)
@@ -102,3 +103,50 @@ def test_examples_preflight_and_bojonegoro_preserves_rounded_population():
     assert [ep.scenes[i].min for i in (1,2)]==[3,5]
     assert ep.scenes[2].caption==['45 dari 100 pekerja.','di sektor pertanian.']
     assert 44.62<361706/810528*100<44.64
+
+
+def test_accepted_other_elements_retain_original_pixels():
+    import hashlib
+    fixture=json.loads((ROOT/'tests/fixtures/accepted_elements.json').read_text())
+    for name,expected in fixture['digests'].items():
+        ctx=canvas()
+        draw_element(ctx,name,phase=fixture['phase'],activity=fixture['activity'])
+        assert hashlib.sha256(ctx.im.tobytes()).hexdigest()==expected,name
+
+
+def test_side_gait_keeps_bone_lengths_and_planted_feet():
+    from gilvy.elements import _walk_pose
+    for activity in (0,.3,.7,1):
+        for phase in np.linspace(0,1,121):
+            hip,shoulder,legs,arms=_walk_pose(phase,activity)
+            for a,b,c in legs:
+                assert math.dist(a,b)==pytest.approx(.225,abs=1e-9)
+                assert math.dist(b,c)==pytest.approx(.225,abs=1e-9)
+                assert c[1]<=.47+1e-12
+            for a,b,c in arms:
+                assert math.dist(a,b)==pytest.approx(.16,abs=1e-9)
+                assert math.dist(b,c)==pytest.approx(.145,abs=1e-9)
+    contacts=[]
+    for phase in (.04,.15,.28,.40):
+        ankle=_walk_pose(phase,1)[2][1][-1]
+        contacts.append((ankle[0]+.64*phase,ankle[1]))
+    assert np.allclose(contacts,contacts[0])
+    # Contact velocity is continuous: the swinging foot lands without a phase pop.
+    eps=1e-6
+    for phase in (.5,1):
+        a=_walk_pose(phase-eps,1)[2][1][-1]
+        b=_walk_pose(phase+eps,1)[2][1][-1]
+        assert (b[0]-a[0])/(2*eps)==pytest.approx(-.64,abs=1e-4)
+
+
+def test_joined_stroke_reveals_by_length_without_changing_other_primitives():
+    ctx=canvas()
+    points=[(400,700),(500,700),(500,800)]
+    ctx.stroke(points,1,p=0)
+    assert np.all(np.array(ctx.im)==10)
+    ctx.stroke(points,1,p=.25)
+    pixels=np.array(ctx.im)
+    assert pixels[350,210,0]>100
+    assert pixels[350,249,0]==10
+    ctx.stroke(points,1,p=1)
+    assert np.array(ctx.im)[398,250,0]>100

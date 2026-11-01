@@ -27,12 +27,17 @@ class _Pen:
     activity: float
     alpha: float
     col: tuple
+    smooth: bool = False
 
     def xy(self, p):
         return self.center[0]+p[0]*self.size, self.center[1]+p[1]*self.size
 
     def path(self, pts, alpha=1, reveal=None):
         pts = [self.xy(p) for p in pts]
+        if self.smooth:
+            self.ctx.stroke(pts,self.alpha*alpha,
+                            p=self.progress if reveal is None else cl(reveal),col=self.col)
+            return
         lengths = [math.dist(a,b) for a,b in zip(pts,pts[1:])]
         remaining = sum(lengths)*(self.progress if reveal is None else cl(reveal))
         for a,b,length in zip(pts,pts[1:],lengths):
@@ -43,11 +48,73 @@ class _Pen:
             remaining -= length
 
     def circle(self, c, r, alpha=1, fill=None, reveal=None):
+        if self.smooth and fill is None:
+            pts=[(c[0]+r*math.cos(-math.pi/2+i*math.tau/128),
+                  c[1]+r*math.sin(-math.pi/2+i*math.tau/128)) for i in range(129)]
+            self.path(pts,alpha=alpha,reveal=reveal)
+            return
         self.ctx.circ(self.xy(c),r*self.size,self.alpha*alpha,w=1.6,
                       p=self.progress if reveal is None else cl(reveal),fill=fill,col=self.col)
 
 
+def _walk_pose(phase, activity):
+    """Right-facing side view. Each thigh/shin has fixed length 0.225.
+
+    During stance the foot stays on the floor relative to the walking body;
+    during return it lifts. Both knees flex forward, arms counter-swing.
+    """
+    angle=phase*math.tau
+    hip_x=-.015*activity
+    ankles=[]
+    for side in (-1,1):
+        t=angle+(math.pi if side<0 else 0)
+        q=(t/math.tau)%1
+        if q<.5:
+            x=.16-.64*q; lift=0
+        else:
+            swing=(q-.5)*2
+            x=-.16+.32*(-4*swing**3+6*swing*swing-swing)
+            lift=.065*math.sin(math.pi*swing)**2
+        ankles.append((hip_x+side*.015*(1-activity)+x*activity,.47-lift*activity))
+    # Derive pelvis height from reach, rather than holding it too low and
+    # forcing the planted knee into a crouch. Both legs retain the same length.
+    hip_y=max(y-math.sqrt(.4495**2-(x-hip_x)**2) for x,y in ankles)
+    hip=(hip_x,hip_y)
+    shoulder=(hip[0]+.025*activity,hip[1]-.30)
+    legs=[]; arms=[]
+    for side,ankle in zip((-1,1),ankles):
+        t=angle+(math.pi if side<0 else 0)
+        dx,dy=ankle[0]-hip[0],ankle[1]-hip[1]
+        distance=math.hypot(dx,dy)
+        half=distance*.5
+        bend=math.sqrt(max(0,.225**2-half*half))
+        knee=((hip[0]+ankle[0])*.5+dy/distance*bend,
+              (hip[1]+ankle[1])*.5-dx/distance*bend)
+        legs.append((hip,knee,ankle))
+        # Elbows flex toward the direction of travel; no sideways diamonds.
+        a=-.50*math.cos(t)*activity
+        elbow=(shoulder[0]+.16*math.sin(a),shoulder[1]+.16*math.cos(a))
+        b=a+.30
+        wrist=(elbow[0]+.145*math.sin(b),elbow[1]+.145*math.cos(b))
+        arms.append((shoulder,elbow,wrist))
+    return hip,shoulder,legs,arms
+
+
 def _person(p):
+    hip,shoulder,legs,arms=_walk_pose(p.phase,p.activity)
+    # Far limbs first, clear fore/back depth. All shoe tips face right.
+    for i in (0,1):
+        p.path(arms[i],alpha=.38 if i==0 else .9)
+        leg=legs[i]
+        ankle=leg[-1]
+        p.path([*leg,(ankle[0]+.045,ankle[1]+.015)],alpha=.4 if i==0 else 1)
+    p.path([(shoulder[0],shoulder[1]-.055),shoulder,hip])
+    p.circle((shoulder[0]+.012,shoulder[1]-.155),.078)
+
+
+def _crowd_person(p):
+    # Preserve the previously accepted compact group glyph. Its small-size
+    # geometry is intentionally independent of the larger articulated person.
     stride = math.sin(p.phase*math.tau)*p.activity
     lift = (1-math.cos(p.phase*math.tau*2))*.008*p.activity
     p.circle((0,-.39-lift),.095)
@@ -58,24 +125,32 @@ def _person(p):
 
 
 def _people(p):
-    # An illustrative group, not a measured population. Use explicit identities
-    # and a fixed denominator in a data scene (see the Bojonegoro example).
+    # An illustrative group, not a measured population.
     for i in range(5):
         child = _Pen(p.ctx,p.xy(((i-2)*.24,0)),p.size*.36,p.progress,
                      p.phase+i*.08,p.activity,p.alpha,p.col)
-        _person(child)
+        _crowd_person(child)
+
+
+def _contour(a,b,c,d):
+    return _curve(a,b,c,d,n=96)
 
 
 def _flame(p):
-    sway=.045*math.sin(p.phase*2.8)*p.activity
-    tip=(sway,-.49)
-    pts=_curve((0,.48),(-.48,.42),(-.35,.04),(-.17,-.11))
-    pts+=_curve(pts[-1],(-.12,.09),(.05,-.10),tip)[1:]
-    pts+=_curve(tip,(.03+sway,-.12),(.44,.13),(.27,.33))[1:]
-    pts+=_curve(pts[-1],(.20,.48),(.08,.49),(0,.48))[1:]
+    # Two tongues, a round fixed base, and a closed inner flame distinguish
+    # fire from water. Local motion moves the tips, never stretches the base.
+    sway=.026*math.sin(p.phase*2.8)*p.activity
+    tip=(.10+sway,-.46+.012*math.sin(p.phase*3.4)*p.activity)
+    pts=_contour((0,.47),(-.24,.47),(-.38,.21),(-.27,.02))
+    pts+=_contour(pts[-1],(-.22,-.06),(-.17,-.13),(-.16,-.24))[1:]
+    pts+=_contour(pts[-1],(-.09,-.15),(-.09,-.04),(-.05,0))[1:]
+    pts+=_contour(pts[-1],(.08+sway,-.12),(.15+sway,-.29),tip)[1:]
+    pts+=_contour(tip,(.35+sway,-.24),(.37,.04),(.28,.25))[1:]
+    pts+=_contour(pts[-1],(.22,.40),(.12,.47),(0,.47))[1:]
     p.path(pts)
-    p.path(_curve((-.06,.33),(-.20,.12),(.05,.03),(.07,-.03)),alpha=.45,
-           reveal=cl(p.progress*1.5-.5))
+    inner=_contour((0,.35),(-.17,.31),(-.09,.19),(.025,.065))
+    inner+=_contour(inner[-1],(.015,.20),(.18,.30),(0,.35))[1:]
+    p.path(inner,alpha=.5,reveal=cl(p.progress*1.5-.5))
 
 
 def _smoke(p):
@@ -87,12 +162,14 @@ def _smoke(p):
 
 
 def _drop(p):
-    tip=(0,-.5)
-    pts=_curve(tip,(-.12,-.25),(-.37,-.03),(-.27,.25))
-    pts+=_curve(pts[-1],(-.18,.56),(.18,.56),(.27,.25))[1:]
-    pts+=_curve(pts[-1],(.37,-.03),(.12,-.25),tip)[1:]
+    # Symmetric tip into a circular lower bowl with horizontal bottom tangent.
+    # A single clean contour avoids reading as the flame's inner tongue.
+    tip=(0,-.47)
+    pts=_contour(tip,(-.08,-.30),(-.32,-.07),(-.32,.15))
+    pts+=_contour(pts[-1],(-.32,.327),(-.177,.47),(0,.47))[1:]
+    pts+=_contour(pts[-1],(.177,.47),(.32,.327),(.32,.15))[1:]
+    pts+=_contour(pts[-1],(.32,-.07),(.08,-.30),tip)[1:]
     p.path(pts)
-    p.path(_curve((-.15,.11),(-.18,.22),(-.10,.31),(-.04,.32)),alpha=.4)
 
 
 def _tree(p):
@@ -180,7 +257,7 @@ def _road(p):
 
 # The verbs and misuse notes are part of the discoverable API, not a taste score.
 _SPECS = {
-    'person': (_person,'human',['stand','walk'],'A faceless person; stage work, travel, or access.','Do not use literal figures for hundreds of counted units.'),
+    'person': (_person,'human',['stand','walk'],'Right-facing side view; fixed-length limbs and a stance/return gait.','Sync phase to distance/(0.64*size) for travel; do not use as a front-view walker.'),
     'people': (_people,'human',['gather','walk'],'Five illustrative people with staggered gait.','Five figures are not automatically a measured share.'),
     'flame': (_flame,'environment',['ignite','sway'],'A bounded flame contour; reveal then let its tip move.','Not evidence of temperature, pollution, or causation.'),
     'smoke': (_smoke,'environment',['rise','drift'],'Three restrained drifting wisps.','Do not decorate every industrial scene with unverified emissions.'),
@@ -230,7 +307,8 @@ def draw_element(ctx, name: str, *, center=(513,780), size=120, progress=1,
         raise GilvyError('element col must be an RGB triple of integers in [0, 255]')
     if progress==0 or alpha==0:
         return
-    pen=_Pen(ctx,tuple(center),size,progress,phase,activity,alpha,col if col is not None else ctx.theme.white)
+    pen=_Pen(ctx,tuple(center),size,progress,phase,activity,alpha,col if col is not None else ctx.theme.white,
+             smooth=name in ('person','flame','drop'))
     _SPECS[name][0](pen)
 
 

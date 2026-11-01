@@ -8,7 +8,7 @@ More available shapes does not mean more simultaneous subjects.
 
 | Element | Useful performance | Direction still needed |
 |---|---|---|
-| `person` | Stand, walk with opposite limbs | Route, goal, obstacle, destination |
+| `person` | Stand or walk, right-facing side view | Route, goal, obstacle, destination |
 | `people` | Five faceless people, staggered gait | Whether the group is illustrative or counted |
 | `flame` | Draw a flame, let its tip sway | Ignition, source, containment, consequence |
 | `smoke` | Draw and drift three wisps | Verified context; no automatic pollution claim |
@@ -39,7 +39,8 @@ def draw(ctx, u, duration, params):
     travel = eio(R(u, .4, duration * .65))
     position = lerp((360, 780), (620, 780), travel)
     draw_element(ctx, "person", center=position, size=110,
-                 progress=appear, phase=u, activity=1-travel)
+                 progress=appear,
+                 phase=(position[0]-360)/(.64*110), activity=1)
 ```
 
 - `center` and `size`: design pixels; fit to the chosen output profile happens
@@ -49,6 +50,18 @@ def draw(ctx, u, duration, params):
 - `phase`: absolute seconds. Pass `u + offset` across scene cuts for the same
   continuing object. The renderer can request frames out of order in workers.
   Helpers have no mutable animation state, random seed, or wall-clock dependence.
+For the right-facing `person`, derive `phase` from the horizontal distance
+traveled: `distance / (0.64 * size)` with `activity=1`. This keeps the stance
+foot planted even during eased travel. A free-running phase on a separately
+eased position can slide the feet. The helper is a side view, not a frontal
+walker. Draw an explicit settling pose if stopping; other elements need no gait
+clock. The compact `people` group retains its separate original glyph.
+
+`drop` and `flame` use a continuous antialiased contour through `Ctx.stroke`,
+with dense cubic samples. Each outline is painted once; do not rebuild curves
+as separately capped short lines. `examples/elements-refined.yaml` isolates
+these three elements for visual review.
+
 - `activity`: local motion amount [0,1], default 0 (still). It animates applicable
   limbs, flame tips, wisps, foliage, rays, pages, flow beads, and road dashes.
   `drop`, `house`, `building`, and `pipe` use draw-on only. Direct travel outside

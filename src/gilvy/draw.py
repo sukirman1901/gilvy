@@ -95,6 +95,43 @@ class Ctx:
             self.line(pts[i], pts[i + 1], al, p=q, w=w, k=k)
             acc += length
 
+    def stroke(self, pts, al, p=1.0, w=1.6, col=None):
+        """Draw a continuous joined contour, revealed by arclength.
+
+        Opt-in for composed vector elements; existing line/poly stay unchanged.
+        Paint the whole sampled curve in one stroke to avoid segment-end seams.
+        """
+        if al <= 0 or p <= 0 or len(pts) < 2:
+            return
+        lengths = [math.dist(a, b) for a, b in zip(pts, pts[1:])]
+        remaining = sum(lengths) * cl(p)
+        visible = [pts[0]]
+        for a, b, length in zip(pts, pts[1:], lengths):
+            if remaining <= 0:
+                break
+            if length > 0:
+                visible.append(lerp(a, b, min(1, remaining / length)))
+            remaining -= length
+        if len(visible) < 2:
+            return
+        # Rasterize only the contour's local box at 4x the existing canvas
+        # scale. Short sampled segments otherwise expose integer-pixel joins.
+        points = [self._xy(*v) for v in visible]
+        width = self._len(w)
+        pad = math.ceil(width) + 2
+        left = math.floor(min(v[0] for v in points)) - pad
+        top = math.floor(min(v[1] for v in points)) - pad
+        right = math.ceil(max(v[0] for v in points)) + pad
+        bottom = math.ceil(max(v[1] for v in points)) + pad
+        aa = 4
+        mask = Image.new("L", ((right-left)*aa, (bottom-top)*aa), 0)
+        ImageDraw.Draw(mask).line([((x-left)*aa, (y-top)*aa) for x,y in points],
+                                  fill=255, width=max(1, round(width*aa)), joint="curve")
+        mask = mask.resize((right-left, bottom-top), Image.Resampling.LANCZOS)
+        self.im.paste(self.mix(self.theme.white if col is None else col, al),
+                      (left, top, right, bottom), mask)
+
+
     def circ(self, c, r, al, w=1.6, p=1.0, fill=None, col=None, start=-90):
         if al <= 0 or r <= 0:
             return
