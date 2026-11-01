@@ -363,19 +363,74 @@ PYTHON_SCENE = {
 }
 
 
+# What an agent should match: the verb, not the topic word.
+SENSE: dict[str, dict[str, str]] = {
+    "bowl_hook": {
+        "verb": "an object draws itself, then one price lands",
+        "slide_if": "used as a title card, or the price appears with no object being born",
+    },
+    "coin_drop": {
+        "verb": "one coin falls into the object already on screen",
+        "slide_if": "used for any sentence that merely mentions money",
+    },
+    "ring_drain": {
+        "verb": "a figure drains into a count of the same unit; count_from continues a previous count",
+        "slide_if": "the grid resets when the sentence is a continuation",
+    },
+    "compare": {
+        "verb": "two counts already shown share one grid",
+        "slide_if": "used as a fresh chart for two new ideas",
+    },
+    "highlight": {
+        "verb": "the sentence is a set of bars, one brighter",
+        "slide_if": "used for a list, a ranking in words, or growth in general",
+    },
+    "bowl_cta": {
+        "verb": "the opening object returns and asks one thing",
+        "slide_if": "used as a text slide with a CTA pasted on",
+    },
+    "timeline": {
+        "verb": "a marker travels to a date that is the subject",
+        "slide_if": "used for history, steps, or anything that is not a date",
+    },
+    "checklist": {
+        "verb": "boxes check themselves because the sentence is a checklist",
+        "slide_if": "used for tips, reasons, or steps that are not checks",
+    },
+    "jars": {
+        "verb": "vessels fill because the sentence is about filling",
+        "slide_if": "used for any comparison of three numbers",
+    },
+    "converge": {
+        "verb": "several distinct things become one",
+        "slide_if": "used as a summary slide",
+    },
+    "coin_cta": {
+        "verb": "coins fall into one coin for a paycheck close",
+        "slide_if": "used for a generic ending",
+    },
+    "python": {
+        "verb": "the sentence's verb is not in the list above, so you stage it yourself",
+        "slide_if": "avoided because writing a scene feels like leaving the template",
+    },
+}
+
+
 def catalog() -> list[dict]:
     rows = []
     for scene in SCENES.values():
-        rows.append(
-            {
-                "name": scene.name,
-                "summary": scene.summary,
-                "green": scene.green,
-                "required": list(scene.required),
-                "params": scene.params,
-            }
-        )
-    rows.append(dict(PYTHON_SCENE))
+        row = {
+            "name": scene.name,
+            "summary": scene.summary,
+            "green": scene.green,
+            "required": list(scene.required),
+            "params": scene.params,
+        }
+        row.update(SENSE[scene.name])
+        rows.append(row)
+    python_row = dict(PYTHON_SCENE)
+    python_row.update(SENSE["python"])
+    rows.append(python_row)
     return rows
 
 

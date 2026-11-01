@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import warnings
+from pathlib import Path
 
 warnings.filterwarnings("ignore", message="Field 'lifespan' has an incomplete definition")
 
@@ -15,13 +16,17 @@ from gilvy.qc import qc_video
 from gilvy.render import preview_episode, render_episode
 from gilvy.scenes import catalog
 
+_DIRECTING = Path(__file__).resolve().parent / "DIRECTING.md"
+
 mcp = FastMCP(
     "gilvy",
     instructions=(
-        "gilvy renders faceless 9:16 explainer videos from a YAML episode. "
-        "Write the voice-over first, pick a scene type per beat, call preview_frames, "
-        "then render_video, then read qc_report. Green marks one number only. "
-        "Caption key words stay white. Do not edit the drawing engine to fix a scene."
+        "You direct a gilvy episode. You do not fill a scene-type form. "
+        "Call directing_notes first and name an object, a physical verb, and what carries "
+        "from the previous scene for every line. Pick a library type only when its verb "
+        "is that verb. Otherwise write a python scene with the Ctx primitives. "
+        "Then preview_frames, render_video, and read qc_report. "
+        "Green is one quantity. Captions stay white. Do not restyle the canvas."
     ),
 )
 
@@ -73,8 +78,24 @@ def qc_report(video_path: str, timeline: str = "") -> str:
 
 
 @mcp.tool()
+def directing_notes() -> str:
+    """Return the directing method. Call this before list_scene_types or writing YAML.
+
+    Name the object, the physical verb, and what carries from the previous scene.
+    A library type is allowed only when its verb is that verb. Any other verb is a
+    python scene. Checklist, bars, timeline, and jars are specific sentences, not
+    the default shape of an explainer.
+    """
+    return _DIRECTING.read_text(encoding="utf-8")
+
+
+@mcp.tool()
 def list_scene_types() -> str:
-    """List scene types, the green role of each, and the YAML parameters they take."""
+    """List performances with the verb each one stages, plus the YAML parameters.
+
+    Call directing_notes first. Match a type to the verb you wrote. The slide_if
+    field is the misuse that makes a cut feel like a slide.
+    """
     return json.dumps(catalog())
 
 

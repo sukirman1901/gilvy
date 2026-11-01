@@ -34,7 +34,7 @@ gilvy = "gilvy.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-gilvy = ["fonts/*"]
+gilvy = ["fonts/*", "DIRECTING.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

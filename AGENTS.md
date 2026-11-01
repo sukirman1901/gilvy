@@ -1,6 +1,6 @@
 # gilvy
 
-Read `skills/gilvy/SKILL.md` before writing or rendering an episode. This file is the short version.
+Read `skills/gilvy/SKILL.md` and `src/gilvy/DIRECTING.md` before writing or rendering an episode. Direct the picture (object, verb, what carries) before you pick a scene type. This file is the short version.
 
 gilvy makes faceless 9:16 explainers. You write a YAML episode. The picture system (canvas, easing, glow, caption position, encode) is fixed so every video looks like the same show.
 

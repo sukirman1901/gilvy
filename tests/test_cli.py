@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from gilvy.cli import run
-from gilvy.mcp_server import list_scene_types
+from gilvy.mcp_server import directing_notes, list_scene_types
 
 
 def test_new_and_preview(tmp_path: Path, monkeypatch):
@@ -24,10 +24,23 @@ def test_custom_scene_previews(tmp_path: Path):
     assert (out / "s01.png").is_file()
 
 
+def test_directing_notes_are_what_the_skill_loads():
+    notes = directing_notes()
+    skill = Path(__file__).resolve().parents[1].joinpath("skills", "gilvy", "SKILL.md").read_text(encoding="utf-8")
+    assert "You are the director" in notes
+    assert "python" in notes
+    assert notes.strip() in skill
+
+
 def test_scene_catalog_lists_the_library():
-    names = [row["name"] for row in json.loads(list_scene_types())]
+    rows = json.loads(list_scene_types())
+    names = [row["name"] for row in rows]
     for required in ("bowl_hook", "coin_drop", "ring_drain", "compare", "highlight", "bowl_cta", "python"):
         assert required in names
+    by_name = {row["name"]: row for row in rows}
+    assert "tips" in by_name["checklist"]["slide_if"]
+    assert "verb" in by_name["python"]
+    assert "not in the list" in by_name["python"]["verb"]
 
 
 def test_render_smoke_passes_qc(tmp_path: Path):
