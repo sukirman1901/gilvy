@@ -17,6 +17,7 @@ from typing import Callable
 from gilvy.draw import coins_flow
 from gilvy.easing import cl, eexp, eio, eo, R, lerp
 from gilvy.errors import GilvyError
+from gilvy.hold import hold_wave
 
 DOT_COLS, DOT_ROWS, DOT_SP = 22, 26, 24
 DOT_GY = 520
@@ -136,7 +137,11 @@ def draw_compare(ctx, u, dur, params):
     if total > DOT_CAP or highlight > total:
         raise GilvyError(f"compare total must be <= {DOT_CAP} and highlight <= total")
     h = eio(R(u, 0.3, 1.3))
-    dots(ctx, total, 1, n_hi=int(highlight * h))
+    n_hi = int(highlight * h)
+    wave = hold_wave(u, dur, 1.7)
+    if wave:
+        n_hi = max(0, min(total, n_hi + int(round(wave * min(10, max(2, highlight // 20))))))
+    dots(ctx, total, 1, n_hi=n_hi)
     a = eo(R(u, 1.2, 1.7))
     yb = DOT_GY + DOT_ROWS * DOT_SP + 40
     gx = _gx(ctx)
@@ -147,11 +152,13 @@ def draw_compare(ctx, u, dur, params):
 def draw_highlight(ctx, u, dur, params):
     heights = list(params.get("heights", [200, 150, 110, 70]))
     index = int(params.get("index", 0))
+    bob = hold_wave(u, dur, 1.4) * 12
     for k, h in enumerate(heights):
         x = 270 + k * 162
         a = eo(R(u, k * 0.1, 0.5 + k * 0.1))
         hl = k == index
-        ctx.rect(x - 40, 1000 - h, x + 40, 1000, a * (1 if hl else 0.35), w=1.4)
+        lift = bob if hl else 0.0
+        ctx.rect(x - 40, 1000 - h - lift, x + 40, 1000, a * (1 if hl else 0.35), w=1.4)
     a = eo(R(u, 0.8, 1.3))
     x = 270 + index * 162
     ctx.line((x, 690), (x, 770), a, w=2)
@@ -185,6 +192,10 @@ def draw_checklist(ctx, u, dur, params):
         a = eo(R(u, d * 0.05, 0.4 + d * 0.05))
         ctx.rect(x - 38, y - 38, x + 38, y + 38, a * 0.5, w=1)
         ctx.check((x, y), a, eio(R(u, 0.6 + d * 0.06, 0.9 + d * 0.06)), sz=8)
+    if dur > 7.0 and u > 1.8 and count > 0:
+        lit = int(((u - 1.8) / 0.28) % count)
+        row, col = divmod(lit, 7)
+        ctx.glow((213 + col * 100, 700 + row * 100), 40, 0.4)
 
 
 def draw_jars(ctx, u, dur, params):
@@ -196,6 +207,7 @@ def draw_jars(ctx, u, dur, params):
         a = eo(R(u, i * 0.15, 0.5 + i * 0.15))
         ctx.poly([(x - 60, y - 90), (x - 52, y + 80), (x + 52, y + 80), (x + 60, y - 90)], a, w=1.5)
         level = (0.5 + 0.15 * i) if spec is None else float(spec[i])
+        level = max(0.0, min(1.0, level + hold_wave(u, dur, 1.6) * 0.06))
         ctx.fillrect(x - 52, y - 80, x + 52, y + 78, eio(R(u, 0.5, 1.6)) * level, a, k=0.2)
 
 
@@ -219,7 +231,7 @@ def draw_converge(ctx, u, dur, params):
         else:
             ctx.circ(xy, 22, a, w=1.4)
     ctx.glow(c0, 140 * m, m * 0.7)
-    ctx.circ(c0, 55, m, w=2)
+    ctx.circ(c0, 55 * (1 + 0.06 * hold_wave(u, dur, 1.8)), m, w=2)
 
 
 def draw_coin_cta(ctx, u, dur, params):

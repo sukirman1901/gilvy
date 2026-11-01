@@ -93,6 +93,14 @@ Palette, if you must override it in YAML: background `(10,10,10)`, white `(236,2
 - A six-beat short is enough: hook, setup, one number, the comparison or second number, the punchline, the CTA.
 - Ask for one comment, one number, or one follow. Do not stack three asks.
 
+## Long scenes stay in motion
+
+The authored beat of a scene is about 1.5–2 seconds: the bowl draws, the coin lands, the bars rise. `ring_drain`, `timeline`, and `coin_cta` already run until the scene ends. The others used to freeze for the rest of a long voice-over.
+
+When one scene is on screen longer than 7 seconds, gilvy keeps the settled picture alive. The frame eases in by about 6% around the focal point and breathes ±1.6% every 3.4 seconds. Compare dots, the highlighted bar, the jar levels, the converged ring, and the checklist each keep a small local motion. Scenes of 7 seconds or less, and the first 1.6 seconds of every scene, are unchanged.
+
+Prefer two beats of the same object over one 20-second scene. A hold is a pulse, not a new idea. Chain the picture the way `examples/ep01-mie-ayam.yaml` does: the bowl stays, the coin falls into it, the count continues with `count_from`, the same dots become the comparison, the bowl returns for the ask. Do not score a long sentence as `checklist`, `highlight`, or `timeline` unless the sentence is actually a list, a set of bars, or a date.
+
 ## Scene choice
 
 | You need | type | Green |

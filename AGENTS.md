@@ -22,6 +22,7 @@ Use `--tts fixture` only to check layout without the network. The voice you ship
 - Paint a second idea green. Caption keys stay white. A word is green only when it starts with `$`, and that should be the same quantity as the one green figure.
 - Move the caption up to chase a safe zone. The baseline is y=1290.
 - Edit `src/gilvy/draw.py` or the scene formulas to fix one episode. Change the YAML, or add a `python` scene that uses the same primitives.
+- Leave a long voice on a scene whose motion already finished. Past 7 seconds gilvy breathes and pushes, but a second beat of the same object is the better cut. Chain objects the way `examples/ep01-mie-ayam.yaml` does.
 - Put secrets, account ids, or personal data in an episode, a voice cache, or a commit.
 
 ## Tools

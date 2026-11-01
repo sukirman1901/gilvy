@@ -18,6 +18,7 @@ from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
+from gilvy.hold import hold_frame, hold_scale
 from gilvy.qc import qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
@@ -86,10 +87,14 @@ class RenderState:
         i = min(int(np.searchsorted(self.starts, t, side="right") - 1), len(self.durations) - 1)
         u = t - self.starts[i]
         image = compose(self.paint(i, u))
+        focal = (float(self.theme.cx), 780.0)
+        image = hold_frame(image, hold_scale(u, self.durations[i]), focal)
         xf = self.theme.crossfade
         if i + 1 < len(self.durations) and u > self.durations[i] - xf:
             k = eio((u - (self.durations[i] - xf)) / xf)
-            nxt = compose(self.paint(i + 1, u - self.durations[i]))
+            nxt_u = u - self.durations[i]
+            nxt = compose(self.paint(i + 1, nxt_u))
+            nxt = hold_frame(nxt, hold_scale(nxt_u, self.durations[i + 1]), focal)
             image = image * (1 - k) + nxt * k
         bg = np.array(self.theme.bg)
         if t < self.theme.intro:
