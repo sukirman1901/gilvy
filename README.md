@@ -47,6 +47,26 @@ A scene is a type from the library (`bowl_hook`, `coin_drop`, `ring_drain`, `com
 
 Voice, language, output path, palette, and font directory are fields on the episode. Nothing is monkeypatched.
 
+## Visual elements and approved motion study
+
+Compose people, flames, smoke, drops, trees, sprouts, houses, buildings, pipes,
+flow, sun, books, and roads inside Python scenes. These helpers use the existing
+Ctx primitives and the locked style. Their local motion is deterministic at
+absolute time, so frame order and worker count do not change the pose.
+
+```bash
+gilvy elements
+gilvy motion-reference
+gilvy preview examples/elements.yaml
+gilvy preview-motion examples/elements.yaml --duration 7
+```
+
+The MCP exposes `list_visual_elements` and `motion_reference`. See the
+[API and Bojonegoro motion study](src/gilvy/MOTION_REFERENCE.md) for usage,
+meaning, and misuse notes. The 41-second approved data story is reproducible
+from `examples/bojonegoro/episode.yaml`; read its dated sources before reuse.
+More vocabulary should add meaning while preserving whitespace and one hero.
+
 ## Review motion before the full cut
 
 Stills check layout; a short video checks rhythm. Name the object, action, carry,

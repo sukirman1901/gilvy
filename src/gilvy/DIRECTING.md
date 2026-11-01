@@ -79,7 +79,7 @@ Reject the scene when:
 
 `entry: scene.py:draw`. The function is `draw(ctx, u, duration, params)`.
 
-Use the primitives only: `line` (pass `p` to draw on), `circ` (`p` draws the ring), `arc`, `poly`, `rect`, `dot`, `coin`, `glow`, `text`, `money` (this one is green), `label`, `check`, `bar`, `fillrect`, `coins_flow`. Travel with `lerp` and `eio`. Fade in with `eo`. Time with `R(u, start, end)`.
+Use Ctx primitives or the composed `gilvy.elements.draw_element` helpers. Discover them with `list_visual_elements`; read `motion_reference` for the API and Bojonegoro study. An element is a component, not a scene type or a reason to add another hero. Available primitives: `line` (pass `p` to draw on), `circ` (`p` draws the ring), `arc`, `poly`, `rect`, `dot`, `coin`, `glow`, `text`, `money` (this one is green), `label`, `check`, `bar`, `fillrect`, `coins_flow`. Travel with `lerp` and `eio`. Fade in with `eo`. Time with `R(u, start, end)`.
 
 Stage it like the library:
 

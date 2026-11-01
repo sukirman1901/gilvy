@@ -13,6 +13,7 @@ from gilvy.formats import get_profile
 from gilvy.qc import qc_video
 from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
 from gilvy.review import compare_versions
+from gilvy.elements import element_catalog, motion_reference_notes
 
 _TEMPLATE = """\
 # 9:16 faceless explainer. Voice-over first, then captions, then a scene type.
@@ -190,10 +191,18 @@ def run(argv: list[str] | None = None) -> int:
     compare.add_argument("--duration", type=float, default=8)
     compare.add_argument("--sample-fps", type=float, default=2)
 
+    sub.add_parser("elements", help="list composable visual elements and their verbs")
+    sub.add_parser("motion-reference", help="read visual vocabulary and Bojonegoro motion study")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "elements":
+            print(json.dumps(element_catalog(), indent=2))
+            return 0
+        if args.command == "motion-reference":
+            print(motion_reference_notes())
+            return 0
         if args.command == "new":
             return _cmd_new(args.name)
         if args.command == "preview":

@@ -16,6 +16,7 @@ from gilvy.qc import qc_video
 from gilvy.render import preview_episode, render_episode, preview_motion as _preview_motion
 from gilvy.review import compare_versions as _compare_versions
 from gilvy.scenes import catalog
+from gilvy.elements import element_catalog, motion_reference_notes
 
 _DIRECTING = Path(__file__).resolve().parent / "DIRECTING.md"
 
@@ -26,6 +27,8 @@ mcp = FastMCP(
         "Call directing_notes first and name an object, a physical verb, and what carries "
         "from the previous scene for every line. Pick a library type only when its verb "
         "is that verb. Otherwise write a python scene with the Ctx primitives. "
+        "Use list_visual_elements for composable people, fire, nature, and infrastructure; "
+        "motion_reference explains their API and the Bojonegoro motion study. "
         "Name the intended meaning and consequence as well. "
         "Then preview_frames and preview_motion; watch the clip before render_video. "
         "Use compare_versions to inspect approved material when extending a cut. "
@@ -153,3 +156,24 @@ def compare_versions(reference_video: str, candidate_video: str, output_dir: str
         return json.dumps(result)
     except GilvyError as exc:
         return _fail(exc)
+
+
+@mcp.tool()
+def list_visual_elements() -> str:
+    """List drawable elements, physical verbs, usage, and misuse notes.
+
+    These are components for python scenes, not YAML scene types. Direct a
+    relationship before selecting a symbol. Human figures have no facial detail;
+    environmental symbols do not establish causal claims or measured data.
+    """
+    return json.dumps(element_catalog())
+
+
+@mcp.tool()
+def motion_reference() -> str:
+    """Read the element API and approved Bojonegoro motion study.
+
+    Includes identity-preserving rearrangement, units, scale, timing, continuation,
+    and examples to reproduce. Transfer the method, not its subject or numbers.
+    """
+    return motion_reference_notes()
