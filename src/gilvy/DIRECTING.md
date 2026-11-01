@@ -44,6 +44,33 @@ Study `examples/ep01-mie-ayam.yaml` for the directing, not for the topic.
 
 A video about rent, coffee, or a subscription uses the same chain with different nouns. It does not become a checklist of three reasons unless the spoken line is literally three checks.
 
+## Motion craft
+
+Gilvy has one personality. Entrances decelerate (`eo`). Travel eases both ways (`eio`). A coin impact uses `eexp`. There is no bounce, no squash, and no second easing family. Do not import a playful overshoot from a UI motion guide. The show is closer to a quiet premium piece: one curve, strokes near 1.6, white structure, one green quantity.
+
+Every scene needs three layers. A frame with only the primary action looks like a slide.
+
+- **Primary.** The verb the eye follows. One hero. It enters first or travels farthest.
+- **Secondary.** Something that follows 0.1–0.2 seconds later: chopsticks after the bowl, steam after the rim, a label after the number, a glow that grows as the object lands. Smaller than the hero.
+- **Ambient.** Life that continues after the pose settles: steam, the slow push after 65% on a long scene, a grid that keeps a small pulse. It never introduces a new idea.
+
+Stage the sentence as a short story, not a state change.
+
+| Share of the scene | What the viewer gets |
+|---|---|
+| First ~0.6s | Setup. The object is born or is already there from the previous scene. |
+| Until 65% | Action. The verb is still happening. The 45% preview frame must not match the 12% frame. |
+| After 65% | Resolution. The pose is readable. Secondary parts finish. Ambient continues. |
+
+Paths say something. A fall is vertical. A count grows in place. A continuation does not fly in from a new corner. All parts of one scene share one origin. If the hero moves, a trailing part is later and shorter, not a second hero moving the other way.
+
+Reject the scene when:
+
+- The only change is opacity.
+- The hero travels in a straight line across more than a third of the frame with no change of pace.
+- Two objects are both the hero.
+- Nothing follows the hero. The landing has no steam, glow, label, or trailing stroke.
+
 ## 3. Write the motion when the library has no verb
 
 `entry: scene.py:draw`. The function is `draw(ctx, u, duration, params)`.
