@@ -1,0 +1,26 @@
+# Isolate each corrected element at reading size; no narrative data claims.
+name: refined-elements
+audio_mode: ambient
+language: id-ID
+scenes:
+  - type: python
+    entry: elements_refined_scene.py:draw
+    element: drop
+    min: 2.8
+    green: none
+    caption: ["Air."]
+    key: ["Air."]
+  - type: python
+    entry: elements_refined_scene.py:draw
+    element: flame
+    min: 2.8
+    green: none
+    caption: ["Api."]
+    key: ["Api."]
+  - type: python
+    entry: elements_refined_scene.py:draw
+    element: person
+    min: 2.8
+    green: none
+    caption: ["Langkah tampak samping."]
+    key: ["Langkah"]

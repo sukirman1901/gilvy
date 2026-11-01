@@ -1,0 +1,69 @@
+name: bojonegoro-paradoks-migas
+audio_mode: ambient
+language: id-ID
+poster: 2
+scenes:
+  - id: bumi
+    type: python
+    entry: cerita.py:draw
+    phase: bumi
+    green: none
+    min: 4.5
+    caption: ["Bojonegoro.", "Tanah yang kaya migas."]
+    key: ["Bojonegoro.", "migas."]
+  - id: pekerja
+    type: python
+    entry: pekerja.py:draw
+    green: none
+    phase: gather
+    min: 3.0
+    caption: ["warganya bekerja", "di mana?"]
+    key: ["bekerja", "mana?"]
+  - id: pertanian
+    type: python
+    entry: pekerja.py:draw
+    green: focus
+    phase: classify
+    min: 5.0
+    caption: ["45 dari 100 pekerja.", "di sektor pertanian."]
+    key: ["45", "pertanian."]
+  - id: dua-jalur
+    type: python
+    entry: cerita.py:draw
+    phase: pisah
+    green: none
+    min: 4.5
+    caption: ["Lalu uang migas", "masuk ke mana?"]
+    key: ["migas", "mana?"]
+  - id: dana
+    type: python
+    entry: cerita.py:draw
+    phase: dana
+    green: focus
+    min: 6.0
+    caption: ["Daerah menerima", "dana bagi hasil migas."]
+    key: ["Daerah", "migas."]
+  - id: manfaat
+    type: python
+    entry: cerita.py:draw
+    phase: manfaat
+    green: none
+    min: 6.0
+    caption: ["Lewat layanan publik.", "Bukan otomatis jadi gaji."]
+    key: ["layanan", "gaji."]
+  - id: kemajuan
+    type: python
+    entry: cerita.py:draw
+    phase: kemajuan
+    green: focus
+    min: 6.0
+    caption: ["Ada kemajuan.", "Kemiskinan menurun."]
+    key: ["kemajuan.", "menurun."]
+  - id: tanya
+    type: python
+    entry: cerita.py:draw
+    phase: tanya
+    green: none
+    min: 6.0
+    caption: ["Kaya daerahnya.", "Lalu hidup warganya?"]
+    key: ["Kaya", "warganya?"]

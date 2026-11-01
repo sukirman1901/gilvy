@@ -93,7 +93,7 @@ Reject the scene when:
 
 `entry: scene.py:draw`. The function is `draw(ctx, u, duration, params)`.
 
-Use the primitives only: `line` (pass `p` to draw on), `circ` (`p` draws the ring), `arc`, `poly`, `rect`, `dot`, `coin`, `glow`, `text`, `money` (this one is green), `label`, `check`, `bar`, `fillrect`, `coins_flow`. Travel with `lerp` and `eio`. Fade in with `eo`. Time with `R(u, start, end)`.
+Use Ctx primitives or the composed `gilvy.elements.draw_element` helpers. Discover them with `list_visual_elements`; read `motion_reference` for the API and Bojonegoro study. An element is a component, not a scene type or a reason to add another hero. Available primitives: `line` (pass `p` to draw on), `circ` (`p` draws the ring), `arc`, `poly`, `rect`, `dot`, `coin`, `glow`, `text`, `money` (this one is green), `label`, `check`, `bar`, `fillrect`, `coins_flow`. Travel with `lerp` and `eio`. Fade in with `eo`. Time with `R(u, start, end)`.
 
 Stage it like the library:
 
@@ -163,6 +163,13 @@ Choose audio mode first: `voiceover` (default), `ambient`, or `silent`. For voic
 ## Creative references and examples
 
 Read [references/creative-review.md](references/creative-review.md) when choosing a new metaphor or when a cut feels generic. It contains a weak/strong comparison, reference-study prompts, and the reflective `examples/reflection.yaml` motion proof. Transfer the relationship and timing principles; do not copy a third party's artwork or force every topic into a dot-and-circle story.
+
+Read [the visual vocabulary and Bojonegoro study](../../src/gilvy/MOTION_REFERENCE.md)
+when choosing people, fire, nature, buildings, or infrastructure, or continuing
+a data story. Use `gilvy elements` / MCP `list_visual_elements` to discover the
+14 composable helpers; `gilvy motion-reference` / MCP `motion_reference` returns
+the same guide. Draw them inside a `python` scene with `gilvy.elements.draw_element`.
+Keep one hero; the vocabulary specimen is not an editorial grid template.
 
 ## Intake (do this before writing YAML)
 
@@ -275,7 +282,7 @@ Use this only after the directing pass above. The first column is a verb, not a 
 
 `ring_drain` and `compare` use a 22×26 dot grid (572 dots). Do not ask for more.
 
-`python` points `entry` at `file.py:draw` next to the episode. The function is `draw(ctx, u, duration, params)` and may only use `Ctx` primitives (`line`, `circ`, `arc`, `poly`, `rect`, `dot`, `coin`, `text`, `money`, `label`, `glow`, `check`). `ctx.money` is green. Everything else stays on `ctx.theme.white` unless it is the same quantity.
+`python` points `entry` at `file.py:draw` next to the episode. The function is `draw(ctx, u, duration, params)` and uses `Ctx` primitives or the composed helpers in `gilvy.elements` (`line`, `circ`, `arc`, `poly`, `rect`, `dot`, `coin`, `text`, `money`, `label`, `glow`, `check`). `ctx.money` is green. Everything else stays on `ctx.theme.white` unless it is the same quantity.
 
 ## Commands
 
@@ -291,7 +298,7 @@ ffmpeg must be on `PATH`. Poppins ships inside the package (OFL). Do not point f
 
 ## Agents
 
-- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `directing_notes`, `list_scene_types`, `preview_frames`, `preview_motion`, `compare_versions`, `render_video`, `qc_report`.
+- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `directing_notes`, `list_scene_types`, `list_visual_elements`, `motion_reference`, `preview_frames`, `preview_motion`, `compare_versions`, `render_video`, `qc_report`.
 - **Claude Code.** `.mcp.json`:
 
 ```json

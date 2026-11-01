@@ -30,6 +30,8 @@ Use `--tts fixture` only to check layout without the network. The voice you ship
 
 `gilvy render`, `gilvy preview`, `gilvy preview-motion`, `gilvy compare`, `gilvy qc`, `gilvy new`, `gilvy mcp`.
 
-MCP tools: `render_video`, `preview_frames`, `preview_motion`, `compare_versions`, `qc_report`, `directing_notes`, `list_scene_types`. Config samples live in `examples/mcp/` and `opencode.json`.
+Visual components: `gilvy elements` / `list_visual_elements`. Read `gilvy motion-reference` / `motion_reference` for the API and approved Bojonegoro study. Components are used inside Python scenes; they are not new scene types.
+
+MCP tools: `list_visual_elements`, `motion_reference`, `render_video`, `preview_frames`, `preview_motion`, `compare_versions`, `qc_report`, `directing_notes`, `list_scene_types`. Config samples live in `examples/mcp/` and `opencode.json`.
 
 The color rule with the original measured ratios is `docs/color-rule.md`.

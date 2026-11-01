@@ -1,0 +1,34 @@
+# A vocabulary specimen, not an editorial scene-composition template.
+# Several equally weighted objects are intentional only in this catalog.
+name: visual-elements
+audio_mode: ambient
+language: id-ID
+scenes:
+  - type: python
+    entry: elements_scene.py:draw
+    page: 0
+    min: 3.5
+    green: none
+    caption: ["Manusia dan ruang."]
+    key: ["Manusia"]
+  - type: python
+    entry: elements_scene.py:draw
+    page: 1
+    min: 3.5
+    green: none
+    caption: ["Energi dan aliran."]
+    key: ["Energi"]
+  - type: python
+    entry: elements_scene.py:draw
+    page: 2
+    min: 3.5
+    green: none
+    caption: ["Tumbuh dan bergerak."]
+    key: ["Tumbuh"]
+  - type: python
+    entry: elements_scene.py:draw
+    page: 3
+    min: 3.5
+    green: none
+    caption: ["Ruang hidup sehari-hari."]
+    key: ["hidup"]
