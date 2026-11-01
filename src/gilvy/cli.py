@@ -11,7 +11,8 @@ from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.formats import get_profile
 from gilvy.qc import qc_video
-from gilvy.render import output_paths, preview_episode, render_episode
+from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
+from gilvy.review import compare_versions
 
 _TEMPLATE = """\
 # 9:16 faceless explainer. Voice-over first, then captions, then a scene type.
@@ -128,7 +129,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
         if result["poster"]:
             print(result["poster"])
         report = result["qc"]
-        print(f"QC {'PASS' if report['ok'] else 'FAIL'}")
+        print(f"QC {'PASS' if report['ok'] else 'FAIL'} (technical only; creative review not evaluated)")
         for item in report["violations"]:
             print(f"- {item}")
         failed = failed or not report["ok"]
@@ -136,7 +137,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_qc(args: argparse.Namespace) -> int:
-    report = qc_video(args.video, args.timeline)
+    report = qc_video(args.video, args.timeline, args.audio_mode)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
@@ -166,9 +167,28 @@ def run(argv: list[str] | None = None) -> int:
     qc.add_argument("video")
     qc.add_argument("--timeline", help="timeline json (default: next to the video)")
     qc.add_argument("--json", action="store_true")
+    qc.add_argument("--audio-mode", choices=("voiceover", "ambient", "silent"), help="override audio expectations when no sidecar is available")
 
     new = sub.add_parser("new", help="scaffold an episode directory")
     new.add_argument("name", help="directory slug, for example ep02")
+
+    motion = sub.add_parser("preview-motion", help="render a short motion-review clip")
+    motion.add_argument("episode")
+    motion.add_argument("--out", "-o")
+    motion.add_argument("--start", type=float, default=0)
+    motion.add_argument("--duration", type=float, default=8)
+    motion.add_argument("--width", type=int, default=540)
+    motion.add_argument("--tts", choices=("edge", "fixture"), default="fixture")
+    motion.add_argument("--workers", type=int, default=0)
+
+    compare = sub.add_parser("compare", help="paired video frames and pixel evidence")
+    compare.add_argument("reference")
+    compare.add_argument("candidate")
+    compare.add_argument("--out", default="out/comparison")
+    compare.add_argument("--reference-start", type=float, default=0)
+    compare.add_argument("--candidate-start", type=float, default=0)
+    compare.add_argument("--duration", type=float, default=8)
+    compare.add_argument("--sample-fps", type=float, default=2)
 
     sub.add_parser("mcp", help="MCP server on stdio")
 
@@ -182,6 +202,17 @@ def run(argv: list[str] | None = None) -> int:
             return _cmd_render(args)
         if args.command == "qc":
             return _cmd_qc(args)
+        if args.command == "preview-motion":
+            episode = load_episode(args.episode)
+            out = Path(args.out).expanduser().resolve() if args.out else Path.cwd() / "out" / f"{episode.name}-motion.mp4"
+            print(json.dumps(preview_motion(episode, out, args.start, args.duration,
+                                           args.tts, args.workers, args.width), indent=2))
+            return 0
+        if args.command == "compare":
+            print(json.dumps(compare_versions(args.reference, args.candidate, args.out,
+                                              args.reference_start, args.candidate_start,
+                                              args.duration, args.sample_fps), indent=2))
+            return 0
         if args.command == "mcp":
             from gilvy.mcp_server import serve
 

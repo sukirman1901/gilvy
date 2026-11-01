@@ -42,10 +42,14 @@ class QCReport:
     blank_times: list[float] = field(default_factory=list)
     dark_times: list[float] = field(default_factory=list)
     silence_gaps: list[dict] = field(default_factory=list)
+    audio_mode: str = "voiceover"
 
     def to_dict(self) -> dict:
         return {
             "ok": self.ok,
+            "scope": "technical",
+            "creative_review": "not_evaluated",
+            "audio_mode": self.audio_mode,
             "video": self.video,
             "duration": round(self.duration, 3),
             "width": self.width,
@@ -60,7 +64,7 @@ class QCReport:
 
     def text(self) -> str:
         status = "PASS" if self.ok else "FAIL"
-        lines = [f"QC {status}  {self.video}  {self.duration:.2f}s  {self.width}x{self.height}"]
+        lines = [f"QC {status} (technical only)  {self.video}  {self.duration:.2f}s  {self.width}x{self.height}"]
         if self.scenes:
             for scene in self.scenes:
                 lines.append(
@@ -127,7 +131,7 @@ def _probe(path: Path) -> dict:
             "-show_entries",
             "format=duration",
             "-show_entries",
-            "stream=codec_type,codec_name,width,height",
+            "stream=codec_type,codec_name,width,height,avg_frame_rate",
             "-of",
             "json",
             str(path),
@@ -205,6 +209,9 @@ def _load_timeline(video: Path, override: str | None) -> dict | None:
     nested = video.parent / video.stem / "timeline.json"
     if nested.is_file():
         return json.loads(nested.read_text(encoding="utf-8"))
+    preview = video.with_suffix(".preview.json")
+    if preview.is_file():
+        return json.loads(preview.read_text(encoding="utf-8"))
     return None
 
 
@@ -214,7 +221,7 @@ def _scene_body(t: float, meta: dict | None) -> bool:
     A scene is allowed to start empty. Blank means it is still empty once the
     picture should be readable.
     """
-    if not meta:
+    if not meta or not meta.get("scenes"):
         return True
     for scene in meta.get("scenes") or []:
         start = float(scene["start"])
@@ -232,7 +239,7 @@ def _caption_allows_green(scene: dict) -> bool:
     return False
 
 
-def qc_video(path: str | Path, timeline: str | None = None) -> QCReport:
+def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | None = None) -> QCReport:
     video = Path(path)
     if not video.is_file():
         raise GilvyError(f"video not found: {video}")
@@ -248,9 +255,15 @@ def qc_video(path: str | Path, timeline: str | None = None) -> QCReport:
     report = QCReport(ok=True, video=str(video), duration=duration, width=width, height=height)
     meta = _load_timeline(video, timeline)
 
-    if audio is None:
+    mode = audio_mode or (meta or {}).get("audio_mode", "voiceover")
+    if mode not in {"voiceover", "ambient", "silent"}:
+        raise GilvyError("audio_mode must be voiceover, ambient, or silent")
+    report.audio_mode = mode
+    if mode == "silent" and audio is not None:
+        report.violations.append("silent mode should have no audio stream")
+    elif mode != "silent" and audio is None:
         report.violations.append("no audio stream")
-    else:
+    elif mode == "voiceover":
         gaps = _silence_gaps(video, duration)
         speech = duration - sum(g["duration"] for g in gaps)
         if duration > 0 and speech < duration * 0.15:

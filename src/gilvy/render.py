@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import multiprocessing
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
-from gilvy.qc import qc_video
+from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
 from gilvy.tts import backend_for, probe_duration, probe_ok, stamp_for
@@ -153,9 +154,11 @@ def _mp_frame(n: int) -> bytes:
     return _STATE.frame_bytes(n)
 
 
-def _encode(state: RenderState, dest: Path, workers: int) -> None:
+def _encode(state: RenderState, dest: Path, workers: int, *,
+            start_frame: int = 0, end_frame: int | None = None, width: int | None = None) -> None:
     fps = state.theme.fps
-    count = int(round(state.total * fps))
+    end_frame = int(round(state.total * fps)) if end_frame is None else end_frame
+    count = end_frame - start_frame
     if count < 1:
         raise GilvyError("the episode is empty")
     if workers > 1 and any(impl is not None for impl in state.impls):
@@ -186,22 +189,23 @@ def _encode(state: RenderState, dest: Path, workers: int) -> None:
         CRF,
         "-preset",
         PRESET,
+        *(["-vf", f"scale={width}:-2"] if width is not None else []),
         str(dest),
     ]
-    print(f"rendering {count} frames ({state.total:.1f}s) with {workers} workers", file=sys.stderr)
+    print(f"rendering {count} frames ({count / fps:.1f}s) with {workers} workers", file=sys.stderr)
     with log_path.open("w") as log:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=log)
         assert proc.stdin is not None
         try:
             if workers <= 1:
                 for n in range(count):
-                    proc.stdin.write(state.frame_bytes(n))
+                    proc.stdin.write(state.frame_bytes(n + start_frame))
                     if n % 120 == 0:
                         print(f"  {n}/{count}", file=sys.stderr)
             else:
                 ctx = multiprocessing.get_context("spawn")
                 with ctx.Pool(workers, initializer=_init_worker, initargs=(state,)) as pool:
-                    for n, blob in enumerate(pool.imap(_mp_frame, range(count), chunksize=8)):
+                    for n, blob in enumerate(pool.imap(_mp_frame, range(start_frame, end_frame), chunksize=8)):
                         proc.stdin.write(blob)
                         if n % 120 == 0:
                             print(f"  {n}/{count}", file=sys.stderr)
@@ -252,7 +256,7 @@ def _mix_audio(pad: Path, voices: list[Path], starts: np.ndarray, lead: float, t
         raise GilvyError(f"ffmpeg audio mix failed:\n{run.stderr[-2000:]}")
 
 
-def _mux(video: Path, audio: Path, total: float, dest: Path) -> None:
+def _mux(video: Path, audio: Path | None, total: float, dest: Path, audio_start: float = 0) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     run = subprocess.run(
         [
@@ -262,14 +266,10 @@ def _mux(video: Path, audio: Path, total: float, dest: Path) -> None:
             "-y",
             "-i",
             str(video),
-            "-i",
-            str(audio),
+            *(["-ss", f"{audio_start:.6f}", "-i", str(audio)] if audio is not None else []),
             "-c:v",
             "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "160k",
+            *(["-c:a", "aac", "-b:a", "160k"] if audio is not None else ["-an"]),
             "-t",
             f"{total:.3f}",
             "-movflags",
@@ -356,6 +356,29 @@ def synthesize(episode: Episode, build: Path, tts_name: str) -> tuple[list[Path]
     return paths, spoken
 
 
+def prepare_timing(episode: Episode, build: Path, tts_name: str) -> tuple[list[Path], list[float]]:
+    if episode.audio_mode == "voiceover":
+        if any(not scene.vo.strip() for scene in episode.scenes):
+            raise GilvyError("voiceover mode requires vo on every scene")
+        paths, spoken = synthesize(episode, build, tts_name)
+        return paths, scene_durations(episode, spoken)
+    if any(scene.min is None for scene in episode.scenes):
+        raise GilvyError("ambient/silent modes require explicit min on every scene")
+    return [], [float(scene.min) for scene in episode.scenes]
+
+
+def prepare_audio(episode: Episode, state: RenderState, build: Path, voices: list[Path]) -> Path | None:
+    if episode.audio_mode == "silent":
+        return None
+    pad = build / "pad.wav"
+    _write_pad(pad, state.total)
+    if episode.audio_mode == "ambient":
+        return pad
+    mix = build / "mix.wav"
+    _mix_audio(pad, voices, state.starts, state.theme.lead, state.total, mix)
+    return mix
+
+
 def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: str) -> None:
     payload = {
         "gilvy": "0.1.0",
@@ -363,7 +386,8 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
         "language": episode.language,
         "voice": episode.voice,
         "rate": episode.rate,
-        "tts": tts_name,
+        "tts": tts_name if episode.audio_mode == "voiceover" else "none",
+        "audio_mode": episode.audio_mode,
         "duration": state.total,
         "fps": state.theme.fps,
         "format": episode.format,
@@ -409,8 +433,7 @@ def preview_episode(episode: Episode, out_dir: Path | None, tts_name: str, fract
     preflight(episode)
     build = (out_dir or (Path.cwd() / "out" / episode.name / "preview")).resolve()
     build.mkdir(parents=True, exist_ok=True)
-    _voices, spoken = synthesize(episode, build, tts_name)
-    durations = scene_durations(episode, spoken)
+    _voices, durations = prepare_timing(episode, build, tts_name)
     state = build_state(episode, durations)
     stills = []
     motion = []
@@ -441,6 +464,7 @@ def preview_episode(episode: Episode, out_dir: Path | None, tts_name: str, fract
         "width": state.theme.width,
         "height": state.theme.height,
         "format": episode.format,
+        "creative_review": "required",
     }
 
 
@@ -456,16 +480,12 @@ def render_episode(episode: Episode, output: Path, tts_name: str, workers: int) 
     preflight(episode)
     build = output.parent / output.stem
     build.mkdir(parents=True, exist_ok=True)
-    voices, spoken = synthesize(episode, build, tts_name)
-    durations = scene_durations(episode, spoken)
+    voices, durations = prepare_timing(episode, build, tts_name)
     state = build_state(episode, durations)
     video = build / "vid.mp4"
     _encode(state, video, workers or default_workers())
-    pad = build / "pad.wav"
-    _write_pad(pad, state.total)
-    mix = build / "mix.wav"
-    _mix_audio(pad, voices, state.starts, state.theme.lead, state.total, mix)
-    _mux(video, mix, state.total, output)
+    audio = prepare_audio(episode, state, build, voices)
+    _mux(video, audio, state.total, output)
     sheet = build / "sheet.png"
     _sheet_from_video(output, state.starts, durations, sheet)
     poster = None
@@ -484,4 +504,60 @@ def render_episode(episode: Episode, output: Path, tts_name: str, workers: int) 
         "duration": state.total,
         "build": str(build),
         "qc": report.to_dict(),
+        "creative_review": "not_evaluated",
+        "audio_mode": episode.audio_mode,
+        "publishable_audio": episode.audio_mode != "voiceover" or tts_name != "fixture",
     }
+
+
+def preview_motion(episode: Episode, output: Path, start: float = 0, duration: float = 8,
+                   tts_name: str = "fixture", workers: int = 0, width: int = 540) -> dict:
+    """Render an exact timeline window, including existing crossfades, for review.
+
+    Downscale only after drawing. Do not reset scene time, re-ease a clipped
+    scene, or apply a new intro/outro at the edges of the selected window.
+    """
+    require_ffmpeg()
+    if not math.isfinite(start) or start < 0 or not math.isfinite(duration) or not 0 < duration <= 12:
+        raise GilvyError("start must be finite and >= 0; duration must be > 0 and <= 12 seconds")
+    if isinstance(width, bool) or not isinstance(width, int) or width < 160 or width % 2:
+        raise GilvyError("preview width must be an even integer >= 160")
+    if output.suffix.lower() != ".mp4":
+        raise GilvyError("preview output must end in .mp4")
+    preflight(episode)
+    if width > theme_for(episode).width:
+        raise GilvyError("preview width must not exceed the delivery width")
+    build = output.parent / (output.stem + "-build")
+    build.mkdir(parents=True, exist_ok=True)
+    voices, durations = prepare_timing(episode, build, tts_name)
+    state = build_state(episode, durations)
+    fps = state.theme.fps
+    first = int(round(start * fps))
+    stop = min(int(round((start + duration) * fps)), int(round(state.total * fps)))
+    if first >= stop:
+        raise GilvyError("preview range contains no frames; start is outside the episode")
+    actual_start, actual_duration = first / fps, (stop - first) / fps
+    picture = build / "picture.mp4"
+    _encode(state, picture, workers or default_workers(), start_frame=first, end_frame=stop, width=width)
+    audio = prepare_audio(episode, state, build, voices)
+    _mux(picture, audio, actual_duration, output, audio_start=actual_start)
+    source_timeline = build / "source.timeline.json"
+    write_timeline(episode, state, source_timeline, tts_name)
+    picture_info = next(s for s in _probe(output)["streams"] if s["codec_type"] == "video")
+    result = {
+        "video": str(output), "source_timeline": str(source_timeline),
+        "start": actual_start, "duration": actual_duration,
+        "end": stop / fps, "source_duration": state.total,
+        "width": picture_info["width"], "height": picture_info["height"],
+        "fps": fps, "audio_mode": episode.audio_mode,
+        "timing_estimated": episode.audio_mode == "voiceover" and tts_name == "fixture",
+        "preview_only": True, "creative_review": "required",
+        "review_questions": [
+            "What can the action communicate with the captions hidden?",
+            "Does the action change a relationship or create a consequence?",
+            "Does the object and its motion survive the scene boundary?",
+            "Is the visual legible at phone size, and does its rhythm support the sentence?",
+        ],
+    }
+    output.with_suffix(".preview.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    return result

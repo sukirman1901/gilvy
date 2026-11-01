@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -62,6 +63,7 @@ class Episode:
     white: tuple[int, int, int] = WHITE
     green: tuple[int, int, int] = GREEN
     format: str = "vertical_9x16"
+    audio_mode: str = "voiceover"
 
     def with_format(self, name: str) -> Episode:
         get_profile(name)
@@ -115,7 +117,7 @@ def _keys(raw, lines: list[str], index: int) -> list[str]:
     return list(raw)
 
 
-def _scene(raw, index: int) -> Scene:
+def _scene(raw, index: int, audio_mode: str = "voiceover") -> Scene:
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index} must be a mapping")
     typ = raw.get("type")
@@ -123,14 +125,16 @@ def _scene(raw, index: int) -> Scene:
         raise EpisodeError(f"scene {index}: missing type")
     caption = _caption(raw.get("caption", raw.get("text")), index)
     keys = _keys(raw.get("key"), caption, index)
-    vo = raw.get("vo")
-    if not isinstance(vo, str) or not vo.strip():
+    vo = raw.get("vo", "")
+    if not isinstance(vo, str) or (audio_mode == "voiceover" and not vo.strip()):
         raise EpisodeError(f"scene {index}: vo is the spoken line and cannot be empty")
     minimum = raw.get("min")
     if minimum is not None:
-        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)) or minimum <= 0:
+        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)) or not math.isfinite(minimum) or minimum <= 0:
             raise EpisodeError(f"scene {index}: min must be a positive number of seconds")
         minimum = float(minimum)
+    if audio_mode != "voiceover" and minimum is None:
+        raise EpisodeError(f"scene {index}: set min explicitly for {audio_mode} reading time")
     green = raw.get("green")
     if green is not None:
         if green not in _GREEN:
@@ -181,9 +185,12 @@ def load_episode(path: str | Path) -> Episode:
     version = data.get("version", 1)
     if version != 1:
         raise EpisodeError("only episode version 1 is supported")
+    audio_mode = str(data.get("audio_mode", "voiceover"))
+    if audio_mode not in {"voiceover", "ambient", "silent"}:
+        raise EpisodeError("audio_mode must be voiceover, ambient, or silent")
     language = str(data.get("language") or "en-US")
-    voice = data.get("voice") or _VOICES.get(language)
-    if not isinstance(voice, str) or not voice.strip():
+    voice = data.get("voice") or _VOICES.get(language, "")
+    if not isinstance(voice, str) or (audio_mode == "voiceover" and not voice.strip()):
         raise EpisodeError("set voice (for example id-ID-ArdiNeural) or a known language (en-US, id-ID)")
     rate = str(data.get("rate") or "-8%")
     if not _RATE.match(rate):
@@ -194,7 +201,7 @@ def load_episode(path: str | Path) -> Episode:
     raw_scenes = data.get("scenes")
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise EpisodeError("scenes must be a non-empty list")
-    scenes = [_scene(item, i + 1) for i, item in enumerate(raw_scenes)]
+    scenes = [_scene(item, i + 1, audio_mode) for i, item in enumerate(raw_scenes)]
     poster = data.get("poster")
     if poster is not None:
         if isinstance(poster, bool) or not isinstance(poster, int) or not 0 <= poster < len(scenes):
@@ -241,6 +248,7 @@ def load_episode(path: str | Path) -> Episode:
         white=white,
         green=green,
         format=delivery,
+        audio_mode=audio_mode,
     )
 
 
