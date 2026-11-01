@@ -1,0 +1,53 @@
+# English explainer. December is already done; the next paycheck is the start.
+# No green: the emphasis is weight and position, not a second color.
+
+name: day30-january
+language: en-US
+voice: en-US-AndrewNeural
+rate: "-8%"
+poster: 4
+
+scenes:
+  - id: hook
+    type: timeline
+    caption: ["start january", "already ahead."]
+    key: ["ahead."]
+    vo: "Start January already ahead."
+    min: 4.23
+    marker: jan 1
+
+  - id: plan
+    type: checklist
+    caption: ["december plan:", "done."]
+    key: ["done."]
+    vo: "December plan. Done."
+    min: 4.03
+    count: 14
+
+  - id: funds
+    type: jars
+    caption: ["sinking funds:", "set."]
+    key: ["set."]
+    vo: "Sinking funds. Set."
+    min: 3.83
+
+  - id: debt
+    type: highlight
+    caption: ["one debt target:", "chosen."]
+    key: ["chosen."]
+    vo: "One debt target. Chosen."
+    min: 4.03
+
+  - id: punch
+    type: converge
+    caption: ["you don't need", "a new year."]
+    key: ["new", "year."]
+    vo: "You don't need a new year."
+    min: 4.23
+
+  - id: cta
+    type: coin_cta
+    caption: ["you need your", "next paycheck."]
+    key: ["next", "paycheck."]
+    vo: "You need your next paycheck. Follow for the January series."
+    min: 5.23

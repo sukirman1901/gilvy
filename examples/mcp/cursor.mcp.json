@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gilvy": {
+      "command": "gilvy",
+      "args": ["mcp"]
+    }
+  }
+}

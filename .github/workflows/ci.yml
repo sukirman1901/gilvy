@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install gilvy
+        run: pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q
+
+  example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the render image
+        run: docker build -t gilvy .
+      - name: Render the Indonesian example and run QC
+        run: |
+          mkdir -p ci-out
+          docker run --rm -v "$PWD/ci-out:/out" gilvy render /opt/gilvy/examples/ep01-mie-ayam.yaml --tts fixture --out /out/ep01-mie-ayam.mp4
+          docker run --rm -v "$PWD/ci-out:/out" gilvy qc /out/ep01-mie-ayam.mp4

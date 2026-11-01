@@ -1,0 +1,17 @@
+# One custom scene. Reach for this only when the scene library cannot say it.
+
+name: custom-figure
+language: en-US
+voice: en-US-AndrewNeural
+rate: "-8%"
+poster: 0
+
+scenes:
+  - id: figure
+    type: python
+    entry: custom_scene.py:draw
+    caption: ["one figure", "is enough."]
+    key: ["enough."]
+    vo: "One figure is enough."
+    min: 3.0
+    price: "$25"

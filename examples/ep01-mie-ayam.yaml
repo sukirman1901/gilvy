@@ -1,0 +1,69 @@
+# Indonesian explainer. One bowl of noodles, then the same bowl counted in two wages.
+# Voice is written out in full; captions stay under five words.
+# Green is only the price, then the wage and its bowl-count — never the caption.
+
+name: ep01-mie-ayam
+language: id-ID
+voice: id-ID-ArdiNeural
+rate: "-8%"
+poster: 4
+
+scenes:
+  - id: hook
+    type: bowl_hook
+    caption: ["mie ayam 10rb,", "tapi gajinya?"]
+    key: ["10rb,", "gajinya?"]
+    vo: "Mie ayam sepuluh ribu di mana-mana... tapi gajinya?"
+    min: 3.6
+    price: Rp10rb
+    note: contoh
+
+  - id: setup
+    type: coin_drop
+    caption: ["anggap aja", "semangkok 10rb."]
+    key: ["10rb."]
+    vo: "Anggap aja semangkok sepuluh ribu, ya."
+    min: 3.4
+    label: "1 koin Rp10rb = 1 mangkok"
+
+  - id: umk
+    type: ring_drain
+    caption: ["UMK Bojonegoro:", "268 mangkok."]
+    key: ["268"]
+    vo: "Gaji UMK Bojonegoro sebulan, cukup buat dua ratus enam puluh delapan mangkok."
+    min: 4.0
+    label: UMK Bojonegoro
+    amount: Rp2.685.983
+    count: 268
+    unit: mangkok
+
+  - id: jakarta
+    type: ring_drain
+    caption: ["UMP Jakarta:", "572 mangkok."]
+    key: ["572"]
+    vo: "Kalau UMP Jakarta? Lima ratus tujuh puluh dua mangkok."
+    min: 4.0
+    label: UMP DKI Jakarta
+    amount: Rp5.729.876
+    count_from: 268
+    count: 572
+    unit: mangkok
+
+  - id: punch
+    type: compare
+    caption: ["mie ayamnya sama,", "gaji beda 2x lebih."]
+    key: ["2x", "lebih."]
+    vo: "Mie ayamnya sama. Gajinya beda lebih dari dua kali."
+    min: 4.0
+    total: 572
+    highlight: 268
+    left: "bojonegoro 268"
+    right: "jakarta 572"
+
+  - id: cta
+    type: bowl_cta
+    caption: ["di tempatmu", "berapa?"]
+    key: ["berapa?"]
+    vo: "Di tempatmu mie ayam berapa? Tulis di komentar ya."
+    min: 4.2
+    label: tulis di komentar
