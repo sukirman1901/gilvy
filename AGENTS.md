@@ -6,6 +6,7 @@ gilvy makes faceless 9:16 explainers. You write a YAML episode. The picture syst
 
 ## Order
 
+0. **Intake.** See `skills/gilvy/SKILL.md` → *Intake* and *Delivery profiles*. Default master is **1080×1920 (9:16)**. Reels, TikTok, and Shorts use that same file. Other aspects are derivatives until a format preset exists.
 1. Spoken line for each scene.
 2. Captions: 1–2 lines, ≤5 words, punctuation attached to the word. `key` copies those words exactly.
 3. One scene type from `list_scene_types`. One idea. Green is one quantity or nothing.

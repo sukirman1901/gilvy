@@ -1,11 +1,61 @@
 ---
 name: gilvy
-description: Produce a faceless 9:16 explainer with gilvy. Use when asked to make, edit, preview, render, or QC a gilvy episode, a motion-graphic short, or a YAML scene list for opencode, Claude Code, or Cursor.
+description: Produce a faceless explainer with gilvy. Use when asked to make, edit, preview, render, or QC a gilvy episode, a motion-graphic short, or a YAML scene list for opencode, Claude Code, or Cursor. Start with delivery intake (format and platforms); default is vertical 9:16.
 ---
 
 # gilvy
 
-gilvy renders a vertical explainer from a YAML episode. The picture is already decided: 1080×1920, 60 fps, Poppins, near-black background, white structure, one green quantity. An agent writes the episode. It does not restyle the renderer.
+gilvy renders an explainer from a YAML episode. **Default delivery** is one locked vertical master: **1080×1920 (9:16), 60 fps**, 2× supersampling down to 1080p, Poppins, near-black background, white structure, one green quantity. An agent writes the episode. It does not restyle the renderer.
+
+## Intake (do this before writing YAML)
+
+Treat every job like a small production brief. Confirm or assume defaults; only skip a step when the user already answered it in the same thread.
+
+| Step | Question | Default if silent |
+|---|---|---|
+| 1 | **Delivery profile** — which master? | `vertical_9x16` → 1080×1920 (see table below) |
+| 2 | **Platforms** — where will this ship? | Same as profile (usually Reels + TikTok + Shorts from one vertical master) |
+| 3 | **Language and voice** | `id-ID` / `id-ID-ArdiNeural` or `en-US` / `en-US-AndrewNeural`, `rate: "-8%"` |
+| 4 | **Length** — beats or target seconds | Six-beat short (~25–35 s) unless the user asks otherwise |
+| 5 | **Topic and CTA** — one idea, one ask | One comment, save, or follow; no stacked CTAs |
+| 6 | **Filename** — episode id for `out/` | `gilvy new <slug>` or copy an example YAML |
+| 7 | **QC bar** | `gilvy qc` must pass before calling the cut “final” |
+
+**Agent todo (copy into your plan and check off):**
+
+- [ ] Delivery profile chosen (default `vertical_9x16`)
+- [ ] Platforms listed; derivatives noted if not all 9:16
+- [ ] Voice and language set on the episode
+- [ ] Scene list sketched (hook → setup → number(s) → punch → CTA)
+- [ ] `list_scene_types` consulted; no invented type names
+- [ ] `preview` with `--tts fixture` reviewed
+- [ ] `render` with edge voice (default)
+- [ ] `qc` pass recorded; violations fixed in YAML only
+
+If the user asks for **landscape, square, or 4:5**, say clearly: gilvy **0.1** only renders the vertical master. Other aspect ratios are **derivatives** (ffmpeg scale/pad/crop from the master) or a **future** `format` preset once layout scales with height. Do not change canvas constants in code for one client.
+
+## Delivery profiles and platforms
+
+| Profile | Pixels | Aspect | gilvy render | Typical platforms |
+|---|---|---|---|---|
+| **`vertical_9x16`** (default) | 1080×1920 | 9:16 | **Native master** — layout, captions, QC tuned for this | Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, Snapchat Spotlight |
+| `square_1x1` | 1080×1080 | 1:1 | Not native — export derivative | Instagram feed (square), some LinkedIn |
+| `portrait_4x5` | 1080×1350 | 4:5 | Not native — export derivative | Instagram feed (portrait), Facebook feed |
+| `landscape_16x9` | 1920×1080 | 16:9 | Not native — export derivative | YouTube long-form, X/Twitter video, LinkedIn, embeds |
+
+**One master, many uploads:** For Reels, TikTok, and Shorts, ship the **same MP4** from `gilvy render` (1080×1920). Codecs: H.264 + AAC in the file gilvy writes; no re-encode needed unless a platform caps file size.
+
+**Derivatives (enterprise handoff):** After QC passes on the master, ops or the agent may produce variants, for example:
+
+```bash
+# Square — letterbox/pillarbox from master (review safe zones; captions sit low on 9:16)
+ffmpeg -i out/ep.mp4 -vf "scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 18 -c:a copy out/ep-square.mp4
+
+# 16:9 — blur or black bars; prefer re-editing copy for important feeds, not blind center-crop
+ffmpeg -i out/ep.mp4 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black" -c:v libx264 -crf 18 -c:a copy out/ep-landscape.mp4
+```
+
+Run **`gilvy qc` only on the master** unless you add platform-specific QC later. Derivatives are for distribution, not for changing the motion-graphic layout rules in `docs/color-rule.md`.
 
 ## Recipe
 
