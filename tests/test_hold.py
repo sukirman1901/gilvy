@@ -1,28 +1,25 @@
-"""Long scenes keep moving. Short scenes stay on the authored frames."""
+"""Long scenes keep a local idle. The camera stays still."""
 
 from gilvy.episode import load_episode
-from gilvy.hold import hold_scale
+from gilvy.hold import hold_wave
 from gilvy.render import build_state
 
 
-def test_short_scene_is_not_scaled():
-    assert hold_scale(3.0, 4.2) == 1.0
-    assert hold_scale(1.6, 20.0) == 1.0
+def test_short_scene_has_no_idle():
+    assert hold_wave(3.0, 4.2) == 0.0
+    assert hold_wave(1.6, 20.0) == 0.0
 
 
-def test_long_scene_pushes_after_the_verb():
-    assert hold_scale(2.2, 18.0) == 1.0
-    assert hold_scale(11.0, 18.0) == 1.0
-    mid = hold_scale(14.0, 18.0)
-    late = hold_scale(17.0, 18.0)
-    assert mid > 1.0
-    assert late > mid
+def test_long_scene_idles_only_after_the_verb():
+    assert hold_wave(2.2, 18.0) == 0.0
+    assert hold_wave(11.0, 18.0) == 0.0
+    assert hold_wave(14.0, 18.0) != 0.0
 
 
 def test_long_compare_changes_during_the_hold():
     episode = load_episode("examples/ep01-mie-ayam.yaml")
     state = build_state(episode, [16.0] * len(episode.scenes))
-    # Punch is scene 4. Sample after the authored beat, then a few seconds later.
+    # Punch is scene 4. The verb is still running at both samples (65% of 16s).
     start = float(state.starts[4])
     first = state.frame_bytes(int((start + 2.4) * 60))
     second = state.frame_bytes(int((start + 6.0) * 60))

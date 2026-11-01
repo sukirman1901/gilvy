@@ -52,7 +52,7 @@ Every scene needs three layers. A frame with only the primary action looks like 
 
 - **Primary.** The verb the eye follows. One hero. It enters first or travels farthest.
 - **Secondary.** Something that follows 0.1–0.2 seconds later: chopsticks after the bowl, steam after the rim, a label after the number, a glow that grows as the object lands. Smaller than the hero.
-- **Ambient.** Life that continues after the pose settles: steam, the slow push after 65% on a long scene, a grid that keeps a small pulse. It never introduces a new idea.
+- **Ambient.** Life that continues after the pose settles: steam, a small pulse on the object that already landed, a grid that keeps a faint life. It never introduces a new idea. The camera stays still.
 
 Stage the sentence as a short story, not a state change.
 
@@ -108,13 +108,13 @@ Read the scene list back as verbs. Throw it out when any of these is true:
 - `checklist`, `highlight`, `timeline`, or `jars` got picked because of a topic word.
 - Pausing the frame at one second would already tell the whole sentence.
 - Green means two different things.
-- A scene longer than about 12 seconds has only one verb. Split it into two beats of the same object. The slow push that starts after 7 seconds keeps a settled frame from looking dead. It does not add a second idea.
+- A scene longer than about 12 seconds has only one verb. Split it into two beats of the same object. A camera zoom does not replace that second beat.
 
 When two chains are possible, keep the one where the object survives more cuts. Preview that one. Look at the contact sheet for layout, then ask whether the frame at 80% is mid-verb or already finished. If it is finished, lengthen the verb or split the line.
 
 ## 5. Timing, preview, delivery
 
-A library verb runs until 65% of the scene, then holds the pose. The frame at 80% is the settled picture, which is what QC measures. The first 0.6 seconds stay the entrance. On a scene longer than 7 seconds, a slow push starts only after that 65% mark.
+A library verb runs until 65% of the scene, then holds the pose. The frame at 80% is the settled picture, which is what QC measures. The first 0.6 seconds stay the entrance. On a scene longer than 7 seconds, the object that already landed keeps a small local idle after that 65% mark. The camera does not zoom.
 
 `gilvy preview` writes three frames per scene: `sNN-t12.png` (entrance), `sNN-t45.png` (the verb), `sNN-t80.png` (the read), plus `motion.png` in that order. If the 12% and 45% frames look the same, the verb died early. Lengthen it, or stage it in `python` with `eio(R(u, 0.4, duration * 0.65))`.
 
