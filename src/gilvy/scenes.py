@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 from gilvy.draw import coins_flow
-from gilvy.easing import cl, eexp, eio, eo, R, lerp
+from gilvy.easing import cl, eexp, eio, eo, R, lerp, span
 from gilvy.errors import GilvyError
 from gilvy.hold import hold_wave
 
@@ -92,8 +92,8 @@ def draw_bowl_hook(ctx, u, dur, params):
     c0 = _focal(ctx)
     a = eo(R(u, 0, 0.6))
     ctx.glow(c0, 150, a * 0.55)
-    bowl(ctx, c0, a, steam=u, chop=eio(R(u, 0.5, 1.3)))
-    aa = eo(R(u, 1.0, 1.5))
+    bowl(ctx, c0, a, steam=u, chop=eio(span(u, 0.5, 1.3, dur)))
+    aa = eo(span(u, 1.0, 1.5, dur))
     ctx.money((ctx.theme.cx, c0[1] + 120), str(params["price"]), aa, sz=34, ex=False)
     note = params.get("note")
     if note:
@@ -103,11 +103,11 @@ def draw_bowl_hook(ctx, u, dur, params):
 def draw_coin_drop(ctx, u, dur, params):
     c0 = _focal(ctx)
     bowl(ctx, c0, 1, steam=u + 3)
-    p = R(u, 0.3, 1.3)
+    p = span(u, 0.3, 1.3, dur)
     if 0 < p < 1:
         ctx.coin((ctx.theme.cx, 420 + (c0[1] - 30 - 420) * eexp(p)), min(1, (1 - p) * 6), r=18)
     ctx.glow(c0, 140, eo(R(u, 1.2, 1.6)) * 0.6 * (1 - eo(R(u, 1.6, dur))))
-    aa = eo(R(u, 1.2, 1.7))
+    aa = eo(span(u, 1.2, 1.7, dur))
     ctx.text((ctx.theme.cx, c0[1] + 120), str(params["label"]), ctx.font("Regular", 22), aa * 0.85)
 
 
@@ -136,13 +136,13 @@ def draw_compare(ctx, u, dur, params):
     highlight = int(params["highlight"])
     if total > DOT_CAP or highlight > total:
         raise GilvyError(f"compare total must be <= {DOT_CAP} and highlight <= total")
-    h = eio(R(u, 0.3, 1.3))
+    h = eio(span(u, 0.3, 1.3, dur))
     n_hi = int(highlight * h)
     wave = hold_wave(u, dur, 1.7)
     if wave:
         n_hi = max(0, min(total, n_hi + int(round(wave * min(10, max(2, highlight // 20))))))
     dots(ctx, total, 1, n_hi=n_hi)
-    a = eo(R(u, 1.2, 1.7))
+    a = eo(span(u, 1.2, 1.7, dur))
     yb = DOT_GY + DOT_ROWS * DOT_SP + 40
     gx = _gx(ctx)
     ctx.text((gx, yb), str(params["left"]), ctx.font("Regular", 22), a * 0.85, col=ctx.theme.green, anchor="lm")
@@ -155,11 +155,11 @@ def draw_highlight(ctx, u, dur, params):
     bob = hold_wave(u, dur, 1.4) * 12
     for k, h in enumerate(heights):
         x = 270 + k * 162
-        a = eo(R(u, k * 0.1, 0.5 + k * 0.1))
+        a = eo(span(u, k * 0.1, 0.5 + k * 0.1, dur))
         hl = k == index
         lift = bob if hl else 0.0
         ctx.rect(x - 40, 1000 - h - lift, x + 40, 1000, a * (1 if hl else 0.35), w=1.4)
-    a = eo(R(u, 0.8, 1.3))
+    a = eo(span(u, 0.8, 1.3, dur))
     x = 270 + index * 162
     ctx.line((x, 690), (x, 770), a, w=2)
     ctx.poly([(x - 15, 755), (x, 775), (x + 15, 755)], a, w=2)
@@ -171,7 +171,7 @@ def draw_bowl_cta(ctx, u, dur, params):
     a = eo(R(u, 0, 0.6))
     ctx.glow(c0, 150, a * 0.6)
     bowl(ctx, c0, a, steam=u, chop=1)
-    ctx.label((ctx.theme.cx, c0[1] + 120), str(params["label"]), eo(R(u, 0.6, 1.1)) * 0.7, sz=20)
+    ctx.label((ctx.theme.cx, c0[1] + 120), str(params["label"]), eo(span(u, 0.6, 1.1, dur)) * 0.7, sz=20)
 
 
 def draw_timeline(ctx, u, dur, params):
@@ -189,10 +189,10 @@ def draw_checklist(ctx, u, dur, params):
         row, col = divmod(d, 7)
         x = 213 + col * 100
         y = 700 + row * 100
-        a = eo(R(u, d * 0.05, 0.4 + d * 0.05))
+        a = eo(span(u, d * 0.05, 0.4 + d * 0.05, dur))
         ctx.rect(x - 38, y - 38, x + 38, y + 38, a * 0.5, w=1)
-        ctx.check((x, y), a, eio(R(u, 0.6 + d * 0.06, 0.9 + d * 0.06)), sz=8)
-    if dur > 7.0 and u > 1.8 and count > 0:
+        ctx.check((x, y), a, eio(span(u, 0.6 + d * 0.06, 0.9 + d * 0.06, dur)), sz=8)
+    if dur > 7.0 and u > max(1.8, dur * 0.65) and count > 0:
         lit = int(((u - 1.8) / 0.28) % count)
         row, col = divmod(lit, 7)
         ctx.glow((213 + col * 100, 700 + row * 100), 40, 0.4)
@@ -204,16 +204,16 @@ def draw_jars(ctx, u, dur, params):
     for i in range(n):
         x = 300 + i * 213
         y = 860
-        a = eo(R(u, i * 0.15, 0.5 + i * 0.15))
+        a = eo(span(u, i * 0.15, 0.5 + i * 0.15, dur))
         ctx.poly([(x - 60, y - 90), (x - 52, y + 80), (x + 52, y + 80), (x + 60, y - 90)], a, w=1.5)
         level = (0.5 + 0.15 * i) if spec is None else float(spec[i])
         level = max(0.0, min(1.0, level + hold_wave(u, dur, 1.6) * 0.06))
-        ctx.fillrect(x - 52, y - 80, x + 52, y + 78, eio(R(u, 0.5, 1.6)) * level, a, k=0.2)
+        ctx.fillrect(x - 52, y - 80, x + 52, y + 78, eio(span(u, 0.5, 1.6, dur)) * level, a, k=0.2)
 
 
 def draw_converge(ctx, u, dur, params):
     c0 = _focal(ctx)
-    m = eio(R(u, 0.2, 1.8))
+    m = eio(span(u, 0.2, 1.8, dur))
     pts = [(300, 700), (726, 700), (300, 960), (726, 960)]
     for k, origin in enumerate(pts):
         xy = lerp(origin, c0, m)

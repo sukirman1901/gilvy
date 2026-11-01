@@ -85,6 +85,14 @@ Read the scene list back as verbs. Throw it out when any of these is true:
 
 When two chains are possible, keep the one where the object survives more cuts. Preview that one. Look at the contact sheet for layout, then ask whether the frame at 80% is mid-verb or already finished. If it is finished, lengthen the verb or split the line.
 
-## 5. Then the usual production pass
+## 5. Timing, preview, delivery
 
-Voice first, captions under five words, keys copied exactly, `min` just above the spoken line, preview, render, QC. Fix a failed QC in the episode. Do not restyle the canvas, the easing, or the caption baseline.
+A library verb runs until 65% of the scene, then holds the pose. The frame at 80% is the settled picture, which is what QC measures. The first 0.6 seconds stay the entrance. On a scene longer than 7 seconds, a slow push starts only after that 65% mark.
+
+`gilvy preview` writes three frames per scene: `sNN-t12.png` (entrance), `sNN-t45.png` (the verb), `sNN-t80.png` (the read), plus `motion.png` in that order. If the 12% and 45% frames look the same, the verb died early. Lengthen it, or stage it in `python` with `eio(R(u, 0.4, duration * 0.65))`.
+
+`format` on the episode, or repeatable `--format`, redraws the same design into a safe rectangle. Profiles: `vertical_9x16` (default, full frame), `vertical_9x16_safe`, `portrait_4x5`, `square_1x1`, `landscape_16x9`. One `--format` keeps the output path. Several write `name-<profile>.mp4`. QC runs on each file. This is a fitted show, not a new landscape composition.
+
+## 6. Then the usual production pass
+
+Voice first, captions under five words, keys copied exactly, `min` just above the spoken line, preview the motion strip, render, QC. Fix a failed QC in the episode. Do not restyle the canvas, the easing, or the caption baseline.

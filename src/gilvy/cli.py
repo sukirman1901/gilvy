@@ -9,8 +9,9 @@ from pathlib import Path
 
 from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
+from gilvy.formats import get_profile
 from gilvy.qc import qc_video
-from gilvy.render import preview_episode, render_episode
+from gilvy.render import output_paths, preview_episode, render_episode
 
 _TEMPLATE = """\
 # 9:16 faceless explainer. Voice-over first, then captions, then a scene type.
@@ -64,15 +65,16 @@ Use Ctx primitives. Green (`ctx.money`, or `col=ctx.theme.green`) is one quantit
 Everything else stays white.
 """
 
-from gilvy.easing import R, eo
+from gilvy.easing import R, eio, eo, lerp
 
 
 def draw(ctx, u, duration, params):
-    alpha = eo(R(u, 0, 0.6))
+    appear = eo(R(u, 0, 0.6))
+    travel = eio(R(u, 0.3, max(1.4, duration * 0.65)))
     center = (ctx.theme.cx, 780)
-    ctx.glow(center, 150, alpha * 0.55)
-    ctx.circ(center, 70, alpha, w=2)
-    ctx.money(center, str(params.get("price", "$25")), alpha, sz=34, ex=True)
+    ctx.glow(center, 150, appear * 0.55)
+    ctx.coin(lerp((ctx.theme.cx, 420), center, travel), appear, r=18)
+    ctx.money((ctx.theme.cx, 980), str(params.get("price", "$25")), eo(R(u, duration * 0.35, max(1.6, duration * 0.65))), sz=34, ex=True)
 '''
 
 
@@ -88,29 +90,49 @@ def _cmd_new(name: str) -> int:
     return 0
 
 
+def _formats(episode, requested: list[str] | None) -> list[str]:
+    names = requested or [episode.format]
+    try:
+        for name in names:
+            get_profile(name)
+    except KeyError as exc:
+        raise GilvyError(str(exc)) from exc
+    return names
+
+
 def _cmd_preview(args: argparse.Namespace) -> int:
     episode = load_episode(args.episode)
+    names = _formats(episode, args.format)
+    if len(names) != 1:
+        raise GilvyError("preview takes one --format")
+    episode = episode.with_format(names[0])
     out = Path(args.out).resolve() if args.out else None
     result = preview_episode(episode, out, args.tts, args.fraction)
     print(result["sheet"])
+    print(result["motion_sheet"])
+    print(f"{result['format']} {result['width']}x{result['height']}")
     print(f"duration {result['duration']:.2f}s  stills {result['scenes']}")
     return 0
 
 
 def _cmd_render(args: argparse.Namespace) -> int:
     episode = load_episode(args.episode)
-    dest = resolve_output(episode, args.out)
-    result = render_episode(episode, dest, args.tts, args.workers)
-    print(result["video"])
-    print(f"duration {result['duration']:.2f}s")
-    print(result["sheet"])
-    if result["poster"]:
-        print(result["poster"])
-    report = result["qc"]
-    print(f"QC {'PASS' if report['ok'] else 'FAIL'}")
-    for item in report["violations"]:
-        print(f"- {item}")
-    return 0 if report["ok"] else 1
+    names = _formats(episode, args.format)
+    base = resolve_output(episode, args.out)
+    failed = False
+    for name, dest in zip(names, output_paths(base, names)):
+        result = render_episode(episode.with_format(name), dest, args.tts, args.workers)
+        print(result["video"])
+        print(f"duration {result['duration']:.2f}s")
+        print(result["sheet"])
+        if result["poster"]:
+            print(result["poster"])
+        report = result["qc"]
+        print(f"QC {'PASS' if report['ok'] else 'FAIL'}")
+        for item in report["violations"]:
+            print(f"- {item}")
+        failed = failed or not report["ok"]
+    return 1 if failed else 0
 
 
 def _cmd_qc(args: argparse.Namespace) -> int:
@@ -131,12 +153,14 @@ def run(argv: list[str] | None = None) -> int:
     render.add_argument("--out", "-o", help="mp4 path (default out/<name>.mp4)")
     render.add_argument("--tts", choices=("edge", "fixture"), default="edge")
     render.add_argument("--workers", type=int, default=0, help="0 uses up to 8 cores")
+    render.add_argument("--format", action="append", help="delivery profile, repeatable. Default is the episode format.")
 
     preview = sub.add_parser("preview", help="stills and a contact sheet")
     preview.add_argument("episode")
     preview.add_argument("--out", "-o", help="directory for pngs")
     preview.add_argument("--tts", choices=("edge", "fixture"), default="edge")
     preview.add_argument("--fraction", type=float, default=0.8)
+    preview.add_argument("--format", action="append", help="one delivery profile")
 
     qc = sub.add_parser("qc", help="green ratio, silence, blank and dark frames")
     qc.add_argument("video")

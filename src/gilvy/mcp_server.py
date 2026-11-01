@@ -54,7 +54,13 @@ def render_video(episode_path: str, output: str = "", tts: str = "edge", workers
 
 @mcp.tool()
 def preview_frames(episode_path: str, output_dir: str = "", tts: str = "edge", fraction: float = 0.8) -> str:
-    """Write one still per scene (at 80% by default) and a contact sheet. This is the fast check before a full render."""
+    """Write the settled still, a motion strip, and a contact sheet.
+
+    Each scene is grabbed at 12% (entrance), 45% (the verb), and 80% (the read).
+    motion_sheet is those frames in order. The 80% still is also sNN.png, which
+    is the color-rule measurement. Pass one delivery profile by setting format
+    on the episode. This is the fast check before a full render.
+    """
     try:
         episode = load_episode(episode_path)
         dest = output_dir or None

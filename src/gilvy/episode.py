@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
 
 from gilvy.errors import EpisodeError
+from gilvy.formats import get_profile
 from gilvy.scenes import DOT_CAP, SCENES
 from gilvy.theme import BG, GREEN, MIN_DURATION, WHITE
 
@@ -60,6 +61,11 @@ class Episode:
     bg: tuple[int, int, int] = BG
     white: tuple[int, int, int] = WHITE
     green: tuple[int, int, int] = GREEN
+    format: str = "vertical_9x16"
+
+    def with_format(self, name: str) -> Episode:
+        get_profile(name)
+        return replace(self, format=name)
 
     @property
     def min_duration(self) -> float:
@@ -215,6 +221,11 @@ def load_episode(path: str | Path) -> Episode:
     output = data.get("output")
     if output is not None and not isinstance(output, str):
         raise EpisodeError("output must be a file path")
+    delivery = str(data.get("format") or "vertical_9x16")
+    try:
+        get_profile(delivery)
+    except KeyError as exc:
+        raise EpisodeError(str(exc)) from exc
     return Episode(
         name=name,
         language=language,
@@ -229,6 +240,7 @@ def load_episode(path: str | Path) -> Episode:
         bg=bg,
         white=white,
         green=green,
+        format=delivery,
     )
 
 

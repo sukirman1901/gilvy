@@ -31,3 +31,22 @@ def R(u: float, a: float, b: float) -> float:
 
 def lerp(a: tuple[float, float], b: tuple[float, float], p: float) -> tuple[float, float]:
     return (a[0] + (b[0] - a[0]) * p, a[1] + (b[1] - a[1]) * p)
+
+
+SETTLE = 0.65
+
+
+def span(u: float, start: float, end: float, dur: float, settle: float = SETTLE) -> float:
+    """Ramp u from start..stop into 0..1.
+
+    stop is the authored `end` when that already covers the scene. On a longer
+    scene stop moves to `settle * dur` (65%), so the verb lasts most of the
+    sentence and the pose at 72% and later matches the authored pose.
+    """
+    stop = end
+    stretched = dur * settle
+    if stretched > end:
+        stop = stretched
+    if stop <= start:
+        stop = start + 1e-6
+    return R(u, start, stop)

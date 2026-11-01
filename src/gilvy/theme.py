@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from gilvy.formats import Fit, fit_of, get_profile
+
 
 BG = (10, 10, 10)
 WHITE = (236, 236, 236)
@@ -47,6 +49,13 @@ class Theme:
     intro: float = INTRO
     outro: float = OUTRO
     font_dir: str = ""
+    fit: Fit = Fit()
 
     def fonts(self) -> str:
         return self.font_dir or str(bundled_fonts())
+
+    @classmethod
+    def from_profile(cls, name: str, **overrides: object) -> Theme:
+        profile = get_profile(name)
+        fit = fit_of(profile)
+        return cls(width=profile.width, height=profile.height, fit=fit, **overrides)

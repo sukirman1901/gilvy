@@ -28,7 +28,8 @@ _STATE: RenderState | None = None
 
 
 def theme_for(episode: Episode) -> Theme:
-    return Theme(
+    return Theme.from_profile(
+        episode.format,
         bg=tuple(episode.bg),
         white=tuple(episode.white),
         green=tuple(episode.green),
@@ -87,7 +88,7 @@ class RenderState:
         i = min(int(np.searchsorted(self.starts, t, side="right") - 1), len(self.durations) - 1)
         u = t - self.starts[i]
         image = compose(self.paint(i, u))
-        focal = (float(self.theme.cx), 780.0)
+        focal = self.theme.fit.map(float(self.theme.cx), 780.0)
         image = hold_frame(image, hold_scale(u, self.durations[i]), focal)
         xf = self.theme.crossfade
         if i + 1 < len(self.durations) and u > self.durations[i] - xf:
@@ -369,6 +370,7 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
         "tts": tts_name,
         "duration": state.total,
         "fps": state.theme.fps,
+        "format": episode.format,
         "width": state.theme.width,
         "height": state.theme.height,
         "palette": {"bg": list(episode.bg), "white": list(episode.white), "green": list(episode.green)},
@@ -389,6 +391,9 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
             }
         )
     dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+PREVIEW_MARKS = (0.12, 0.45, 0.80)
 
 
 def save_png(state: RenderState, t: float, dest: Path) -> None:
@@ -412,16 +417,42 @@ def preview_episode(episode: Episode, out_dir: Path | None, tts_name: str, fract
     durations = scene_durations(episode, spoken)
     state = build_state(episode, durations)
     stills = []
+    motion = []
     for i, dur in enumerate(durations):
-        dest = build / f"s{i + 1:02d}.png"
-        save_png(state, float(state.starts[i] + dur * fraction), dest)
-        stills.append(str(dest))
-        print(f"still {i + 1} {dest.name}", file=sys.stderr)
+        start = float(state.starts[i])
+        for mark in PREVIEW_MARKS:
+            dest = build / f"s{i + 1:02d}-t{int(round(mark * 100)):02d}.png"
+            save_png(state, start + dur * mark, dest)
+            motion.append(str(dest))
+        settled = build / f"s{i + 1:02d}.png"
+        save_png(state, start + dur * fraction, settled)
+        stills.append(str(settled))
+        print(f"still {i + 1} {settled.name}", file=sys.stderr)
     sheet = build / "sheet.png"
     _hstack([Path(p) for p in stills], sheet)
+    motion_sheet = build / "motion.png"
+    _hstack([Path(p) for p in motion], motion_sheet)
     timeline = build / "timeline.json"
     write_timeline(episode, state, timeline, tts_name)
-    return {"stills": stills, "sheet": str(sheet), "timeline": str(timeline), "duration": state.total, "scenes": len(durations)}
+    return {
+        "stills": stills,
+        "sheet": str(sheet),
+        "motion": motion,
+        "motion_sheet": str(motion_sheet),
+        "timeline": str(timeline),
+        "duration": state.total,
+        "scenes": len(durations),
+        "width": state.theme.width,
+        "height": state.theme.height,
+        "format": episode.format,
+    }
+
+
+def output_paths(base: Path, formats: list[str]) -> list[Path]:
+    """One format keeps the caller's path. Several formats suffix the profile name."""
+    if len(formats) <= 1:
+        return [base]
+    return [base.with_name(f"{base.stem}-{name}{base.suffix}") for name in formats]
 
 
 def render_episode(episode: Episode, output: Path, tts_name: str, workers: int) -> dict:

@@ -10,11 +10,13 @@ def test_short_scene_is_not_scaled():
     assert hold_scale(1.6, 20.0) == 1.0
 
 
-def test_long_scene_pushes_in_after_the_arrival():
-    early = hold_scale(2.2, 18.0)
-    later = hold_scale(10.0, 18.0)
-    assert early > 1.0
-    assert later > early
+def test_long_scene_pushes_after_the_verb():
+    assert hold_scale(2.2, 18.0) == 1.0
+    assert hold_scale(11.0, 18.0) == 1.0
+    mid = hold_scale(14.0, 18.0)
+    late = hold_scale(17.0, 18.0)
+    assert mid > 1.0
+    assert late > mid
 
 
 def test_long_compare_changes_during_the_hold():

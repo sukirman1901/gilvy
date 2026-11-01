@@ -99,9 +99,17 @@ Read the scene list back as verbs. Throw it out when any of these is true:
 
 When two chains are possible, keep the one where the object survives more cuts. Preview that one. Look at the contact sheet for layout, then ask whether the frame at 80% is mid-verb or already finished. If it is finished, lengthen the verb or split the line.
 
-## 5. Then the usual production pass
+## 5. Timing, preview, delivery
 
-Voice first, captions under five words, keys copied exactly, `min` just above the spoken line, preview, render, QC. Fix a failed QC in the episode. Do not restyle the canvas, the easing, or the caption baseline.
+A library verb runs until 65% of the scene, then holds the pose. The frame at 80% is the settled picture, which is what QC measures. The first 0.6 seconds stay the entrance. On a scene longer than 7 seconds, a slow push starts only after that 65% mark.
+
+`gilvy preview` writes three frames per scene: `sNN-t12.png` (entrance), `sNN-t45.png` (the verb), `sNN-t80.png` (the read), plus `motion.png` in that order. If the 12% and 45% frames look the same, the verb died early. Lengthen it, or stage it in `python` with `eio(R(u, 0.4, duration * 0.65))`.
+
+`format` on the episode, or repeatable `--format`, redraws the same design into a safe rectangle. Profiles: `vertical_9x16` (default, full frame), `vertical_9x16_safe`, `portrait_4x5`, `square_1x1`, `landscape_16x9`. One `--format` keeps the output path. Several write `name-<profile>.mp4`. QC runs on each file. This is a fitted show, not a new landscape composition.
+
+## 6. Then the usual production pass
+
+Voice first, captions under five words, keys copied exactly, `min` just above the spoken line, preview the motion strip, render, QC. Fix a failed QC in the episode. Do not restyle the canvas, the easing, or the caption baseline.
 <!-- directing:end -->
 
 ## Intake (do this before writing YAML)
@@ -124,35 +132,28 @@ Treat every job like a small production brief. Confirm or assume defaults; only 
 - [ ] Platforms listed; derivatives noted if not all 9:16
 - [ ] Voice and language set on the episode
 - [ ] Scene list sketched (hook → setup → number(s) → punch → CTA)
-- [ ] `list_scene_types` consulted; no invented type names
-- [ ] `preview` with `--tts fixture` reviewed
+- [ ] `directing_notes` read; verbs named before types
+- [ ] `preview` with `--tts fixture` reviewed, including `motion.png`
 - [ ] `render` with edge voice (default)
 - [ ] `qc` pass recorded; violations fixed in YAML only
 
-If the user asks for **landscape, square, or 4:5**, say clearly: gilvy **0.1** only renders the vertical master. Other aspect ratios are **derivatives** (ffmpeg scale/pad/crop from the master) or a **future** `format` preset once layout scales with height. Do not change canvas constants in code for one client.
+## Delivery profiles
 
-## Delivery profiles and platforms
+Set `format` in the episode or pass repeatable `--format`. The design stays 1080×1920 and is fitted, uniformly, into the safe rectangle. Circles stay circles. `vertical_9x16` is identity: no inset, byte-for-byte the show.
 
-| Profile | Pixels | Aspect | gilvy render | Typical platforms |
-|---|---|---|---|---|
-| **`vertical_9x16`** (default) | 1080×1920 | 9:16 | **Native master** — layout, captions, QC tuned for this | Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, Snapchat Spotlight |
-| `square_1x1` | 1080×1080 | 1:1 | Not native — export derivative | Instagram feed (square), some LinkedIn |
-| `portrait_4x5` | 1080×1350 | 4:5 | Not native — export derivative | Instagram feed (portrait), Facebook feed |
-| `landscape_16x9` | 1920×1080 | 16:9 | Not native — export derivative | YouTube long-form, X/Twitter video, LinkedIn, embeds |
-
-**One master, many uploads:** For Reels, TikTok, and Shorts, ship the **same MP4** from `gilvy render` (1080×1920). Codecs: H.264 + AAC in the file gilvy writes; no re-encode needed unless a platform caps file size.
-
-**Derivatives (enterprise handoff):** After QC passes on the master, ops or the agent may produce variants, for example:
+| Profile | Pixels | Insets L,T,R,B | Where it ships |
+|---|---|---|---|
+| `vertical_9x16` (default) | 1080×1920 | 0,0,0,0 | Reels, TikTok, Shorts, the master |
+| `vertical_9x16_safe` | 1080×1920 | 80, 160, 120, 420 | Same apps, kept clear of the buttons and the caption chrome |
+| `portrait_4x5` | 1080×1350 | 60, 80, 60, 220 | Instagram and Facebook feed |
+| `square_1x1` | 1080×1080 | 60, 80, 60, 160 | Square feed |
+| `landscape_16x9` | 1920×1080 | 80, 60, 80, 140 | YouTube wide, LinkedIn, X |
 
 ```bash
-# Square — letterbox/pillarbox from master (review safe zones; captions sit low on 9:16)
-ffmpeg -i out/ep.mp4 -vf "scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 18 -c:a copy out/ep-square.mp4
-
-# 16:9 — blur or black bars; prefer re-editing copy for important feeds, not blind center-crop
-ffmpeg -i out/ep.mp4 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black" -c:v libx264 -crf 18 -c:a copy out/ep-landscape.mp4
+gilvy render ep.yaml --format vertical_9x16 --format square_1x1
 ```
 
-Run **`gilvy qc` only on the master** unless you add platform-specific QC later. Derivatives are for distribution, not for changing the motion-graphic layout rules in `docs/color-rule.md`.
+One profile writes `out/<name>.mp4`. Several write `out/<name>-<profile>.mp4`. QC runs on each file. Landscape is the vertical show fitted in the safe area, not a recomposed frame.
 
 ## Recipe
 
@@ -163,7 +164,7 @@ Do the steps in this order. Preview is cheap. A full render is the whole timelin
 3. **Mark key words** by copying those words exactly, punctuation included. Keys are SemiBold white. They are not green.
 4. **Pick one scene type** from `gilvy` / `list_scene_types`. One idea on screen.
 5. **Set `min`** just above the spoken line so the drawing can finish and the next voice is not late. A `min` far above the real speech leaves a silence hole. QC fails internal gaps of 2 seconds or more.
-6. **Preview.** `gilvy preview ep.yaml` (or `preview_frames`). Open the contact sheet. Stills are at 80% of each scene, which is the color-rule measurement point.
+6. **Preview.** `gilvy preview ep.yaml` (or `preview_frames`). Open `motion.png`: 12% is the entrance, 45% must still be mid-verb, 80% is the settled read and the color-rule point. `sNN.png` is that 80% frame.
 7. **Render.** `gilvy render ep.yaml` (or `render_video`). Default voice is edge-tts at `-8%`.
 8. **QC.** `gilvy qc out/<name>.mp4` exits non-zero on a violation. `render` already runs it. Fix the YAML and repeat from preview. Do not edit `draw.py`, easing, or the canvas to force a scene to pass.
 
@@ -192,9 +193,9 @@ Palette, if you must override it in YAML: background `(10,10,10)`, white `(236,2
 
 ## Long scenes stay in motion
 
-The authored beat of a scene is about 1.5–2 seconds: the bowl draws, the coin lands, the bars rise. `ring_drain`, `timeline`, and `coin_cta` already run until the scene ends. The others used to freeze for the rest of a long voice-over.
+A library verb runs until 65% of the scene, then holds. The entrance still finishes in about 0.6 seconds. `ring_drain`, `timeline`, and `coin_cta` already follow the scene length. The pose at 72% and at 80% is the finished pose, so the color rule is measured on the same picture as before.
 
-When one scene is on screen longer than 7 seconds, gilvy keeps the settled picture alive. The frame eases in by about 6% around the focal point and breathes ±1.6% every 3.4 seconds. Compare dots, the highlighted bar, the jar levels, the converged ring, and the checklist each keep a small local motion. Scenes of 7 seconds or less, and the first 1.6 seconds of every scene, are unchanged.
+When one scene is longer than 7 seconds, the slow push and the small idle start only after that 65% mark. The frame eases in by about 6% around the focal point and breathes. Compare dots, the highlighted bar, the jar levels, the converged ring, and the checklist each keep a local motion in that tail.
 
 Prefer two beats of the same object over one 20-second scene. A hold is a pulse, not a new idea. Chain the picture the way `examples/ep01-mie-ayam.yaml` does: the bowl stays, the coin falls into it, the count continues with `count_from`, the same dots become the comparison, the bowl returns for the ask. Do not score a long sentence as `checklist`, `highlight`, or `timeline` unless the sentence is actually a list, a set of bars, or a date.
 

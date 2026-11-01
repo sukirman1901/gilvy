@@ -18,24 +18,33 @@ HOLD_AFTER = 7.0
 ARRIVAL = 1.6
 
 
-def holding(u: float, dur: float, start: float = ARRIVAL) -> bool:
+def settle_at(dur: float) -> float:
+    """The verb owns the frame until 65% of the scene. The hold starts after that."""
+    return max(ARRIVAL, dur * 0.65)
+
+
+def holding(u: float, dur: float, start: float | None = None) -> bool:
+    if start is None:
+        start = settle_at(dur)
     return dur > HOLD_AFTER and u > start
 
 
 def hold_wave(u: float, dur: float, start: float = 1.8) -> float:
-    """Smooth −1..1 cycle. Zero until the authored beat has finished."""
-    if not holding(u, dur, start):
+    """Smooth −1..1 cycle. Zero while the verb is still running, and on every short scene."""
+    begin = max(start, settle_at(dur))
+    if not holding(u, dur, begin):
         return 0.0
-    return math.sin(2 * math.pi * (u - start) / 3.4)
+    return math.sin(2 * math.pi * (u - begin) / 3.4)
 
 
 def hold_scale(u: float, dur: float) -> float:
-    """1.0 during the arrival and for every short scene. Then a slow push plus a breath."""
-    if not holding(u, dur):
+    """1.0 while the verb plays and for every short scene. Then a slow push plus a breath."""
+    begin = settle_at(dur)
+    if not holding(u, dur, begin):
         return 1.0
-    end = max(dur - 0.35, ARRIVAL + 0.05)
-    creep = 0.06 * eio(R(u, ARRIVAL, end))
-    bob = 0.016 * math.sin(2 * math.pi * (u - ARRIVAL) / 3.4)
+    end = max(dur - 0.35, begin + 0.05)
+    creep = 0.06 * eio(R(u, begin, end))
+    bob = 0.012 * (0.5 - 0.5 * math.cos(2 * math.pi * (u - begin) / 3.4))
     return 1.0 + creep + bob
 
 

@@ -11,8 +11,9 @@ gilvy makes faceless 9:16 explainers. You write a YAML episode. The picture syst
 2. Captions: 1–2 lines, ≤5 words, punctuation attached to the word. `key` copies those words exactly.
 3. One scene type from `list_scene_types`. One idea. Green is one quantity or nothing.
 4. `gilvy preview ep.yaml` and look at the contact sheet.
-5. `gilvy render ep.yaml`
-6. `gilvy qc` must pass. `render` runs it and exits non-zero when it does not.
+5. `gilvy preview ep.yaml` and read `motion.png` (12% entrance, 45% mid-verb, 80% settled).
+6. `gilvy render ep.yaml`. Repeat `--format` for another canvas. Default is `vertical_9x16`.
+7. `gilvy qc` must pass. `render` runs it and exits non-zero when it does not.
 
 Use `--tts fixture` only to check layout without the network. The voice you ship is edge-tts (`--tts edge`, the default).
 

@@ -13,7 +13,11 @@ def test_new_and_preview(tmp_path: Path, monkeypatch):
     out = tmp_path / "preview"
     assert run(["preview", str(episode), "--tts", "fixture", "--out", str(out)]) == 0
     assert (out / "sheet.png").is_file()
+    assert (out / "motion.png").is_file()
     assert (out / "s01.png").is_file()
+    assert (out / "s01-t12.png").is_file()
+    assert (out / "s01-t45.png").is_file()
+    assert (out / "s01-t80.png").is_file()
     assert (out / "s02.png").is_file()
 
 

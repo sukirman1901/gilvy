@@ -41,8 +41,26 @@ class Ctx:
         self.g = Image.new("L", (theme.width // 4, theme.height // 4), 0)
         self.gd = ImageDraw.Draw(self.g)
 
+    def _identity(self) -> bool:
+        fit = self.theme.fit
+        return fit.scale == 1.0 and fit.ox == 0.0 and fit.oy == 0.0
+
+    def _xy(self, x: float, y: float) -> tuple[float, float]:
+        s = self.theme.scale
+        if self._identity():
+            return x * s, y * s
+        mx, my = self.theme.fit.map(x, y)
+        return mx * s, my * s
+
+    def _len(self, value: float) -> float:
+        s = self.theme.scale
+        if self._identity():
+            return value * s
+        return value * self.theme.fit.scale * s
+
     def font(self, weight: str, size: float) -> ImageFont.FreeTypeFont:
-        return load_font(self.theme.fonts(), weight, size, self.theme.scale)
+        fitted = size if self._identity() else size * self.theme.fit.scale
+        return load_font(self.theme.fonts(), weight, fitted, self.theme.scale)
 
     def mix(self, color: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
         amount = cl(amount)
@@ -54,12 +72,13 @@ class Ctx:
             return
         if col is None:
             col = self.theme.white
-        s = self.theme.scale
         e = lerp(a, b, p)
+        x0, y0 = self._xy(a[0], a[1])
+        x1, y1 = self._xy(e[0], e[1])
         self.d.line(
-            [a[0] * s, a[1] * s, e[0] * s, e[1] * s],
+            [x0, y0, x1, y1],
             fill=self.mix(col, al * k),
-            width=max(1, int(w * s)),
+            width=max(1, int(self._len(w))),
         )
 
     def poly(self, pts, al, p=1.0, w=1.6, k=0.7):
@@ -81,11 +100,12 @@ class Ctx:
             return
         if col is None:
             col = self.theme.white
-        s = self.theme.scale
-        bb = [(c[0] - r) * s, (c[1] - r) * s, (c[0] + r) * s, (c[1] + r) * s]
+        x0, y0 = self._xy(c[0] - r, c[1] - r)
+        x1, y1 = self._xy(c[0] + r, c[1] + r)
+        bb = [x0, y0, x1, y1]
         if fill is not None:
             self.d.ellipse(bb, fill=self.mix(col, al * fill))
-        width = max(1, int(w * s))
+        width = max(1, int(self._len(w)))
         if p >= 1:
             self.d.ellipse(bb, outline=self.mix(col, al), width=width)
         elif p > 0:
@@ -96,23 +116,29 @@ class Ctx:
             return
         if col is None:
             col = self.theme.white
-        s = self.theme.scale
-        bb = [(c[0] - r) * s, (c[1] - r) * s, (c[0] + r) * s, (c[1] + r) * s]
-        self.d.arc(bb, a0, a1, fill=self.mix(col, al), width=max(1, int(w * s)))
+        x0, y0 = self._xy(c[0] - r, c[1] - r)
+        x1, y1 = self._xy(c[0] + r, c[1] + r)
+        self.d.arc([x0, y0, x1, y1], a0, a1, fill=self.mix(col, al), width=max(1, int(self._len(w))))
 
     def rect(self, x0, y0, x1, y1, al, w=1.6, fill=None, p=1.0, k=0.8):
         if al <= 0:
             return
-        s = self.theme.scale
         if fill is not None:
-            self.d.rectangle([x0 * s, y0 * s, x1 * s, y1 * s], fill=self.mix(self.theme.white, al * fill))
+            ax, ay = self._xy(x0, y0)
+            bx, by = self._xy(x1, y1)
+            self.d.rectangle([ax, ay, bx, by], fill=self.mix(self.theme.white, al * fill))
         if w:
             self.poly([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)], al, p=p, w=w, k=k)
 
     def glow(self, c, r, al):
         q = 4
+        if self._identity():
+            x, y, radius = c[0], c[1], r
+        else:
+            x, y = self.theme.fit.map(c[0], c[1])
+            radius = r * self.theme.fit.scale
         self.gd.ellipse(
-            [(c[0] - r) / q, (c[1] - r) / q, (c[0] + r) / q, (c[1] + r) / q],
+            [(x - radius) / q, (y - radius) / q, (x + radius) / q, (y + radius) / q],
             fill=int(90 * cl(al)),
         )
 
@@ -128,46 +154,52 @@ class Ctx:
             return
         if col is None:
             col = self.theme.white
-        s = self.theme.scale
-        self.d.text((xy[0] * s, xy[1] * s), t, font=font, fill=self.mix(col, al), anchor=anchor)
+        x, y = self._xy(xy[0], xy[1])
+        self.d.text((x, y), t, font=font, fill=self.mix(col, al), anchor=anchor)
 
     def coin(self, c, al, r=15):
         if al <= 0:
             return
         self.circ(c, r, al, w=1.8, fill=0.10)
         self.text(c, "$", self.font("Medium", int(r * 1.13)), al)
+        if self._identity():
+            gx, gy, gr = c[0], c[1], r * 1.6
+        else:
+            gx, gy = self.theme.fit.map(c[0], c[1])
+            gr = r * 1.6 * self.theme.fit.scale
         self.gd.ellipse(
-            [(c[0] - r * 1.6) / 4, (c[1] - r * 1.6) / 4, (c[0] + r * 1.6) / 4, (c[1] + r * 1.6) / 4],
+            [(gx - gr) / 4, (gy - gr) / 4, (gx + gr) / 4, (gy + gr) / 4],
             fill=int(45 * cl(al)),
         )
 
     def bar(self, x, y, w, lvl, al, h=5, k=0.9):
         if al <= 0:
             return
-        s = self.theme.scale
-        self.d.rectangle([(x - w / 2) * s, y * s, (x + w / 2) * s, (y + h) * s], fill=self.mix(self.theme.white, al * 0.15))
+        x0, y0 = self._xy(x - w / 2, y)
+        x1, y1 = self._xy(x + w / 2, y + h)
+        self.d.rectangle([x0, y0, x1, y1], fill=self.mix(self.theme.white, al * 0.15))
         if lvl > 0:
-            self.d.rectangle(
-                [(x - w / 2) * s, y * s, (x - w / 2 + w * cl(lvl)) * s, (y + h) * s],
-                fill=self.mix(self.theme.white, al * k),
-            )
+            fx, fy = self._xy(x - w / 2 + w * cl(lvl), y + h)
+            self.d.rectangle([x0, y0, fx, fy], fill=self.mix(self.theme.white, al * k))
 
     def fillrect(self, x0, y0, x1, y1, lvl, al, k=0.16):
         if al <= 0 or lvl <= 0:
             return
-        s = self.theme.scale
         top = y1 - (y1 - y0) * cl(lvl)
-        self.d.rectangle([x0 * s, top * s, x1 * s, y1 * s], fill=self.mix(self.theme.white, al * k))
+        ax, ay = self._xy(x0, top)
+        bx, by = self._xy(x1, y1)
+        self.d.rectangle([ax, ay, bx, by], fill=self.mix(self.theme.white, al * k))
 
     def fillcirc(self, c, r, lvl, al):
         if al <= 0 or lvl <= 0:
             return
-        s = self.theme.scale
-        mask = Image.new("L", (int(2 * r * s), int(2 * r * s)), 0)
+        side = self._len(2 * r)
+        mask = Image.new("L", (max(1, int(side)), max(1, int(side))), 0)
         md = ImageDraw.Draw(mask)
-        md.ellipse([0, 0, 2 * r * s - 1, 2 * r * s - 1], fill=int(255 * 0.16 * al))
-        md.rectangle([0, 0, 2 * r * s, int(2 * r * s * (1 - lvl))], fill=0)
-        self.im.paste(Image.new("RGB", mask.size, self.theme.white), (int((c[0] - r) * s), int((c[1] - r) * s)), mask)
+        md.ellipse([0, 0, side - 1, side - 1], fill=int(255 * 0.16 * al))
+        md.rectangle([0, 0, side, int(side * (1 - lvl))], fill=0)
+        px, py = self._xy(c[0] - r, c[1] - r)
+        self.im.paste(Image.new("RGB", mask.size, self.theme.white), (int(px), int(py)), mask)
 
     def check(self, c, al, p, sz=12):
         self.poly(
@@ -188,12 +220,16 @@ class Ctx:
 
 
 def grid(ctx: Ctx, al: float = 1) -> None:
-    s = ctx.theme.scale
     ink = ctx.mix(ctx.theme.white, al * 0.05)
+    width = 1 if ctx._identity() else max(1, int(ctx._len(0.5)))
     for x in range(108, 920, 81):
-        ctx.d.line([x * s, 330 * s, x * s, 1420 * s], fill=ink, width=1)
+        x0, y0 = ctx._xy(x, 330)
+        x1, y1 = ctx._xy(x, 1420)
+        ctx.d.line([x0, y0, x1, y1], fill=ink, width=width)
     for y in range(330, 1421, 81):
-        ctx.d.line([108 * s, y * s, 918 * s, y * s], fill=ink, width=1)
+        x0, y0 = ctx._xy(108, y)
+        x1, y1 = ctx._xy(918, y)
+        ctx.d.line([x0, y0, x1, y1], fill=ink, width=width)
 
 
 def coins_flow(ctx, a, b, u, t0, t1, n, al=1, stag=0.4, trav=1.0, r=15, path=None):
