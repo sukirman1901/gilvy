@@ -1,0 +1,26 @@
+# Reflective, caption-and-ambient motion proof. No TTS is called.
+# The same trail strokes become the wall that blocks a return.
+# See skills/gilvy/references/creative-review.md for the weak/strong comparison.
+name: reflection
+audio_mode: ambient
+language: id-ID
+voice: id-ID-ArdiNeural
+rate: "-8%"
+poster: 1
+scenes:
+  - id: jejak
+    type: python
+    entry: reflection_scene.py:draw
+    green: none
+    offset: 0
+    caption: ["sudah sejauh ini."]
+    key: ["sejauh", "ini."]
+    min: 3.1
+  - id: terkurung
+    type: python
+    entry: reflection_scene.py:draw
+    green: none
+    offset: 3.1
+    caption: ["sampai sulit", "untuk berbalik."]
+    key: ["sulit", "berbalik."]
+    min: 4.1

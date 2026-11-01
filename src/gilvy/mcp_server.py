@@ -13,7 +13,8 @@ from mcp.server.fastmcp import FastMCP
 from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.qc import qc_video
-from gilvy.render import preview_episode, render_episode
+from gilvy.render import preview_episode, render_episode, preview_motion as _preview_motion
+from gilvy.review import compare_versions as _compare_versions
 from gilvy.scenes import catalog
 
 _DIRECTING = Path(__file__).resolve().parent / "DIRECTING.md"
@@ -25,7 +26,10 @@ mcp = FastMCP(
         "Call directing_notes first and name an object, a physical verb, and what carries "
         "from the previous scene for every line. Pick a library type only when its verb "
         "is that verb. Otherwise write a python scene with the Ctx primitives. "
-        "Then preview_frames, render_video, and read qc_report. "
+        "Name the intended meaning and consequence as well. "
+        "Then preview_frames and preview_motion; watch the clip before render_video. "
+        "Use compare_versions to inspect approved material when extending a cut. "
+        "QC is technical only and never creative approval. "
         "Green is one quantity. Captions stay white. Do not restyle the canvas."
     ),
 )
@@ -74,10 +78,10 @@ def preview_frames(episode_path: str, output_dir: str = "", tts: str = "edge", f
 
 
 @mcp.tool()
-def qc_report(video_path: str, timeline: str = "") -> str:
+def qc_report(video_path: str, timeline: str = "", audio_mode: str = "") -> str:
     """Check green-ratio, silence gaps, and blank or dark frames. ok is false when a rule is broken."""
     try:
-        report = qc_video(video_path, timeline or None)
+        report = qc_video(video_path, timeline or None, audio_mode or None)
         return json.dumps(report.to_dict())
     except GilvyError as exc:
         return _fail(exc)
@@ -107,3 +111,45 @@ def list_scene_types() -> str:
 
 def serve() -> None:
     mcp.run(transport="stdio")
+
+
+@mcp.tool()
+def preview_motion(episode_path: str, output: str = "", start: float = 0,
+                   duration: float = 8, tts: str = "fixture", workers: int = 0,
+                   width: int = 540) -> str:
+    """Render a short review clip (duration > 0 and <= 12 seconds) at the original timing and fps.
+
+    Select a window spanning the important transformation or scene boundary.
+    Defaults to fixture timing for offline review; fixture audio is a diagnostic
+    tone, not publishable voice. Set audio_mode in YAML for ambient/silent cuts.
+    Watch the resulting MP4. A still strip cannot establish rhythm or legibility.
+    """
+    try:
+        episode = load_episode(episode_path)
+        dest = Path(output).expanduser().resolve() if output else Path.cwd() / "out" / f"{episode.name}-motion.mp4"
+        result = _preview_motion(episode, dest, start, duration, tts, workers, width)
+        result["ok"] = True
+        return json.dumps(result)
+    except GilvyError as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def compare_versions(reference_video: str, candidate_video: str, output_dir: str = "",
+                     reference_start: float = 0, candidate_start: float = 0,
+                     duration: float = 8, sample_fps: float = 2) -> str:
+    """Create paired frames and pixel differences for an approved clip and a revision.
+
+    Use matching resolutions. Align the starts explicitly if the clip moved.
+    Results are sampled evidence, not a creative score or proof of continuity.
+    An approved sample's outro may intentionally differ in the full version;
+    inspect that difference rather than hiding or automatically approving it.
+    """
+    try:
+        dest = output_dir or str(Path.cwd() / "out" / "comparison")
+        result = _compare_versions(reference_video, candidate_video, dest,
+                                   reference_start, candidate_start, duration, sample_fps)
+        result["ok"] = True
+        return json.dumps(result)
+    except GilvyError as exc:
+        return _fail(exc)

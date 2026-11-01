@@ -20,11 +20,15 @@ Do this pass before you write YAML. Call `directing_notes` if you are on MCP, an
 
 ## 1. Verb, then type
 
-For every spoken line, write three words in your plan. They never appear on screen.
+For every spoken line or caption beat, write five fields in your plan. They never appear on screen.
 
 - **Object.** The noun in the frame. Prefer the object from the previous scene.
 - **Verb.** What it does during this sentence: draws, falls, drains, counts, splits, travels, fills, checks, converges, returns. "Shows", "lists", and "explains" are not verbs. Rewrite the line until a physical verb exists.
 - **Carry.** What is already on screen, and the one thing that changes.
+- **Meaning.** What relationship or feeling the action makes understandable without the caption.
+- **Consequence.** What the action changes or leaves behind for the next beat.
+
+A verb alone is not a direction. "Dot travels" can satisfy a form while communicating nothing. "The accumulated trail bends into the wall that blocks the dot" has a visible cause and consequence. Hide the captions mentally: identify what the picture still contributes. Not every sentence must be understandable without words, but the picture must add more than decoration.
 
 Then pick a type whose verb is that verb. If none is, write a `python` scene. That is normal directing, not a fallback for experts.
 
@@ -124,7 +128,7 @@ Read the scene list back as verbs. Throw it out when any of these is true:
 - Green means two different things.
 - A scene longer than about 12 seconds has only one verb. Split it into two beats of the same object. A camera zoom does not replace that second beat.
 
-When two chains are possible, keep the one where the object survives more cuts. Preview that one. Look at the contact sheet for layout, then ask whether the frame at 80% is mid-verb or already finished. If it is finished, lengthen the verb or split the line.
+When two chains are possible, prefer the one with the clearest cause and consequence, then preserve its objects across cuts. Use stills to inspect layout. The 80% frame is expected to be settled; it does not establish how long the action lived. Watch a motion clip to judge that.
 
 ## 5. Timing, preview, delivery
 
@@ -134,10 +138,31 @@ A library verb runs until 65% of the scene, then holds the pose. The frame at 80
 
 `format` on the episode, or repeatable `--format`, redraws the same design into a safe rectangle. Profiles: `vertical_9x16` (default, full frame), `vertical_9x16_safe`, `portrait_4x5`, `square_1x1`, `landscape_16x9`. One `--format` keeps the output path. Several write `name-<profile>.mp4`. QC runs on each file. This is a fitted show, not a new landscape composition.
 
-## 6. Then the usual production pass
+## 6. Prove the motion before the full cut
 
-Voice first, captions under five words, keys copied exactly, `min` just above the spoken line, preview the motion strip, render, QC. Fix a failed QC in the episode. Do not restyle the canvas, the easing, or the caption baseline.
+Choose a narrative shape before applying a template. A numerical explainer may use setup, quantity, comparison, and question. A reflective piece may use conflict, pressure, change, and an open ending. Do not add an arbitrary number or a comment CTA to fit the explainer recipe.
+
+Render a 5–8 second `preview_motion` window containing the defining transformation and, when possible, a scene boundary. Watch it at normal speed and phone size. Review:
+
+- Does the action communicate the intended relationship with captions hidden?
+- Does something happen because of the previous action, rather than another symbol appearing?
+- Do pace, pauses, contrast, and scale support the sentence?
+- Is the secondary motion supporting the action, or disguising an otherwise static picture?
+
+Revise a failed motion proof before rendering the full cut. This is a self-review requirement, not an extra permission gate. If the user explicitly requests sample approval, deliver the sample and wait; otherwise continue within the task's authorization.
+
+When continuing an approved cut, keep the approved scene source and authored timing. Use `compare_versions` on matching-resolution videos, aligning their time ranges. Inspect paired frames and differences; codec noise and the removal of an old sample's outro may be intentional. Sampled equality is not proof that every frame is unchanged. Explain intended changes instead of claiming a comparison automatically approves the revision.
+
+Technical QC checks the output's integrity and style constraints. It does not assess metaphor, emotional impact, rhythm, or originality. A `QC PASS` is never a creative-quality verdict. Do not invent an anti-slop score from motion energy, pixel change, glow, or number of effects.
+
+## 7. Then the usual production pass
+
+Choose audio mode first: `voiceover` (default), `ambient`, or `silent`. For voiceover, write the spoken line before the caption and time against the actual voice. For ambient/silent, set explicit scene `min` durations for reading; TTS is not called. Keep captions under five words per line, keys copied exactly, inspect stills, watch the motion proof, render, then run technical QC. Diagnose the reported failure; fix episode inputs or custom scene logic as appropriate, rather than changing the locked drawing engine.
 <!-- directing:end -->
+
+## Creative references and examples
+
+Read [references/creative-review.md](references/creative-review.md) when choosing a new metaphor or when a cut feels generic. It contains a weak/strong comparison, reference-study prompts, and the reflective `examples/reflection.yaml` motion proof. Transfer the relationship and timing principles; do not copy a third party's artwork or force every topic into a dot-and-circle story.
 
 ## Intake (do this before writing YAML)
 
@@ -147,9 +172,9 @@ Treat every job like a small production brief. Confirm or assume defaults; only 
 |---|---|---|
 | 1 | **Delivery profile** — which master? | `vertical_9x16` → 1080×1920 (see table below) |
 | 2 | **Platforms** — where will this ship? | Same as profile (usually Reels + TikTok + Shorts from one vertical master) |
-| 3 | **Language and voice** | `id-ID` / `id-ID-ArdiNeural` or `en-US` / `en-US-AndrewNeural`, `rate: "-8%"` |
+| 3 | **Audio mode, language and voice** | `id-ID` / `id-ID-ArdiNeural` or `en-US` / `en-US-AndrewNeural`, `rate: "-8%"` |
 | 4 | **Length** — beats or target seconds | Six-beat short (~25–35 s) unless the user asks otherwise |
-| 5 | **Topic and CTA** — one idea, one ask | One comment, save, or follow; no stacked CTAs |
+| 5 | **Topic and CTA** — one idea, one ask | One fitting ending; a reflective piece may end without a CTA |
 | 6 | **Filename** — episode id for `out/` | `gilvy new <slug>` or copy an example YAML |
 | 7 | **QC bar** | `gilvy qc` must pass before calling the cut “final” |
 
@@ -158,11 +183,14 @@ Treat every job like a small production brief. Confirm or assume defaults; only 
 - [ ] Delivery profile chosen (default `vertical_9x16`)
 - [ ] Platforms listed; derivatives noted if not all 9:16
 - [ ] Voice and language set on the episode
-- [ ] Scene list sketched (hook → setup → number(s) → punch → CTA)
+- [ ] Narrative shape selected for the topic; no forced numerical beat or CTA
+- [ ] Object, verb, carry, meaning, and consequence named for each beat
 - [ ] `directing_notes` read; verbs named before types
 - [ ] `preview` with `--tts fixture` reviewed, including `motion.png`
-- [ ] `render` with edge voice (default)
-- [ ] `qc` pass recorded; violations fixed in YAML only
+- [ ] 5–8 second motion proof watched; creative review recorded in concrete terms
+- [ ] Approved material compared when extending an existing cut
+- [ ] `render` with the chosen audio mode; real voice for narrated delivery
+- [ ] Technical `qc` result recorded separately from creative judgment
 
 ## Delivery profiles
 
@@ -186,16 +214,16 @@ One profile writes `out/<name>.mp4`. Several write `out/<name>-<profile>.mp4`. Q
 
 Do the steps in this order. Preview is cheap. A full render is the whole timeline at 60 fps.
 
-1. **Write the voice-over first.** One spoken sentence per scene. Read it aloud. The scene will last `max(min, spoken seconds + 0.6)`.
+1. **Choose audio mode and write the line first.** For `voiceover`, write one spoken sentence per scene; duration is `max(min, spoken seconds + 0.6)`. For `ambient` or `silent`, set explicit `min` reading durations; `vo` may be omitted and no TTS runs. Ambient/silent total duration is the sum of scene `min` values; lead, crossfade, and fades live inside that time, not in additional seconds.
 2. **Compress each sentence into captions.** One or two lines. At most five words per line. Width under 780 px at Poppins 52 (the renderer refuses longer lines). Punctuation stays on the word: `lebih.` is one word, `lebih .` is two and will not match a key.
 3. **Mark key words** by copying those words exactly, punctuation included. Keys are SemiBold white. They are not green.
 4. **Pick one scene type** from `gilvy` / `list_scene_types`. One idea on screen.
 5. **Set `min`** just above the spoken line so the drawing can finish and the next voice is not late. A `min` far above the real speech leaves a silence hole. QC fails internal gaps of 2 seconds or more.
 6. **Preview.** `gilvy preview ep.yaml` (or `preview_frames`). Open `motion.png`: 12% is the entrance, 45% must still be mid-verb, 80% is the settled read and the color-rule point. `sNN.png` is that 80% frame.
-7. **Render.** `gilvy render ep.yaml` (or `render_video`). Default voice is edge-tts at `-8%`.
-8. **QC.** `gilvy qc out/<name>.mp4` exits non-zero on a violation. `render` already runs it. Fix the YAML and repeat from preview. Do not edit `draw.py`, easing, or the canvas to force a scene to pass.
+7. **Watch the motion proof, then render.** `gilvy preview-motion ep.yaml --duration 7` (or `preview_motion`). Choose a start that includes the key transformation or a boundary. Render the full cut only after evaluating the motion. Default voice is edge-tts at `-8%`.
+8. **QC.** `gilvy qc out/<name>.mp4` exits non-zero on a violation. `render` already runs it. Diagnose the violation and repeat from preview. Fix the episode or its custom scene; do not edit `draw.py`, easing, or the canvas to force a pass. Technical PASS does not replace creative review.
 
-Offline layout checks use `--tts fixture`. Fixture is a tone, not a voice. Publish with `--tts edge`.
+Offline narrated layout checks use `--tts fixture`. Fixture is a tone, not a voice. Publish narrated cuts with `--tts edge`; ambient/silent cuts use their explicit audio mode.
 
 ## Style
 
@@ -215,8 +243,8 @@ Palette, if you must override it in YAML: background `(10,10,10)`, white `(236,2
 - Spoken line and caption say the same thing. The spoken line can be a little longer. Numbers in the voice are words (`dua ratus enam puluh delapan`), numbers on screen are digits (`268`).
 - Hypothetical money wears a small note: `example` in English, `contoh` in Indonesian. Pass it as `note` on `bowl_hook`, or leave `ex` on in a custom scene.
 - Indonesian episodes use `language: id-ID` and `voice: id-ID-ArdiNeural`. English uses `en-US-AndrewNeural`. Keep `rate: "-8%"`.
-- A six-beat short is enough: hook, setup, one number, the comparison or second number, the punchline, the CTA.
-- Ask for one comment, one number, or one follow. Do not stack three asks.
+- Choose the narrative structure for the subject. The six-beat numerical explainer is one option; reflection, metaphor, and narrative may need a different progression.
+- If a CTA serves the piece, use one ask. An open or reflective ending needs no marketing CTA.
 
 ## Long scenes stay in motion
 
@@ -263,7 +291,7 @@ ffmpeg must be on `PATH`. Poppins ships inside the package (OFL). Do not point f
 
 ## Agents
 
-- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `list_scene_types`, `preview_frames`, `render_video`, `qc_report`.
+- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `directing_notes`, `list_scene_types`, `preview_frames`, `preview_motion`, `compare_versions`, `render_video`, `qc_report`.
 - **Claude Code.** `.mcp.json`:
 
 ```json
@@ -272,6 +300,6 @@ ffmpeg must be on `PATH`. Poppins ships inside the package (OFL). Do not point f
 
 - **Cursor.** The same JSON in `.cursor/mcp.json`.
 
-Call `list_scene_types` before inventing a type name. After `render_video`, read `ok` and `qc.violations`. A failed QC is a script problem: a second green idea, a caption that went green, a `min` that left a hole, or a focus that never appeared. Change the episode and render again.
+Call `list_scene_types` before inventing a type name. After `render_video`, read `ok` and `qc.violations`. A failed technical QC needs diagnosis: a second green idea, a caption that went green, a `min` that left a hole, or a focus that never appeared. Fix the episode or custom scene as appropriate and render again. A successful output is not automatically creatively approved.
 
 Examples: `examples/ep01-mie-ayam.yaml` (Indonesian), `examples/day30-january.yaml` (English, no green), `examples/custom.yaml` (python escape hatch).

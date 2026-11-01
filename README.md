@@ -32,7 +32,9 @@ gilvy qc out/ep01-mie-ayam.mp4
 |---|---|
 | `gilvy new ep02` | Scaffold `ep02/ep02.yaml` and a custom-scene stub |
 | `gilvy preview ep.yaml` | One still per scene at 80%, plus a contact sheet |
-| `gilvy render ep.yaml` | Voice, pictures, music bed, AAC mux. Then QC |
+| `gilvy render ep.yaml` | Render the selected voiceover, ambient, or silent mode. Then technical QC |
+| `gilvy preview-motion ep.yaml --duration 7` | Watch a short timeline window, including scene boundaries |
+| `gilvy compare approved.mp4 candidate.mp4` | Inspect paired frames and pixel differences; no automatic creative approval |
 | `gilvy qc out.mp4` | Green ratio, silence gaps, blank and dark frames. Exit 1 on a violation |
 | `gilvy mcp` | MCP server on stdio |
 
@@ -41,8 +43,41 @@ A scene is a type from the library (`bowl_hook`, `coin_drop`, `ring_drain`, `com
 - `examples/ep01-mie-ayam.yaml` — Indonesian, `id-ID-ArdiNeural`
 - `examples/day30-january.yaml` — English, no green
 - `examples/custom.yaml` — the escape hatch
+- `examples/reflection.yaml` — an offline caption-and-ambient metaphor, no numerical beat or CTA
 
 Voice, language, output path, palette, and font directory are fields on the episode. Nothing is monkeypatched.
+
+## Review motion before the full cut
+
+Stills check layout; a short video checks rhythm. Name the object, action, carry,
+meaning, and consequence before choosing a scene type. Watch a 5–8 second proof
+before the full render. When continuing an approved cut, compare matching-size
+clips and inspect intended changes such as the removal of a sample's outro.
+
+```bash
+gilvy preview-motion examples/reflection.yaml --duration 7.2 --out out/proof.mp4
+gilvy render examples/reflection.yaml
+gilvy compare out/proof.mp4 out/revised-proof.mp4 --duration 7.2
+```
+
+Set `audio_mode: voiceover` (default), `ambient`, or `silent` in YAML. Ambient
+and silent scenes require explicit `min` reading durations, may omit `vo`, and
+never call TTS. Voiceover mode still requires a spoken line on every scene.
+There is no automatic switch of audio modes after a TTS error.
+
+The MCP exposes `preview_motion` and `compare_versions` alongside the existing
+tools. Motion previews keep the original scene clock and frame rate, then
+optionally downscale the encoded picture. Their default fixture voice is a
+layout tone and `timing_estimated` is true; narrated delivery uses real TTS.
+Comparison produces sampled reference/candidate/difference images and raw pixel
+measurements. Encoding noise is also a difference; these are not quality scores.
+Preview sidecars record audio mode and frame dimensions for `gilvy qc` as well.
+Without a sidecar, `gilvy qc clip.mp4 --audio-mode ambient` selects audio expectations explicitly.
+
+`QC PASS` means technical checks passed for the selected audio mode. Results
+explicitly report `scope: technical` and `creative_review: not_evaluated`.
+Creative quality still requires watching and evaluating the piece. See
+[creative-review.md](skills/gilvy/references/creative-review.md) for examples.
 
 ## Color
 
