@@ -1,9 +1,25 @@
 ---
 name: gilvy
-description: Direct a faceless explainer with gilvy. Use when asked to make, edit, preview, render, or QC a gilvy episode or a motion-graphic short for opencode, Claude Code, or Cursor. Direct the picture (object, verb, what carries) before picking a scene type. Default delivery is vertical 9:16.
+description: Direct and render Gilvy explainers or SaaS/product motion films. Use for creating, editing, studying references, previewing or reviewing motion graphics. Choose the renderer from the brief, design the picture and choreography, and inspect an encoded proof before a full cut.
 ---
 
 # gilvy
+
+## Choose the production path first
+
+For explicitly requested SaaS/product motion, read
+[product motion](../../src/gilvy/PRODUCT_MOTION.md), including its evidence and
+review contract, before the explainer directions below. MCP agents call
+`product_motion_notes`. Use `style: product` and `preview-product` /
+`render-product`; do not impose the explainer's Poppins, dots, green quantity,
+caption baseline, fixed camera, mandatory ambient motion or duration ratios.
+Use primitive layers for a custom composition. Inbox/menu/panel presets are
+optional accelerators, not the universe of possible designs. The AI authors
+the visual hierarchy, functional story and choreography; Gilvy executes them.
+Do not add an engine template for each new reference. When a necessary drawing
+operation is missing, name the capability gap before claiming fidelity.
+
+For the established explainer show, follow the locked system below.
 
 gilvy renders an explainer from a YAML episode. **Default delivery** is one locked vertical master: **1080×1920 (9:16), 60 fps**, 2× supersampling down to 1080p, Poppins, near-black background, white structure, one green quantity. You direct the episode. You do not restyle the renderer, and you do not fill a scene-type form.
 

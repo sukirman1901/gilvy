@@ -1,0 +1,124 @@
+# An original capability proof, informed by observed Numtera motion mechanisms.
+# Object/verb/carry: repeated question -> learning bar -> reusable workflow.
+# Meaning/consequence: one resolved issue becomes a repeatable process.
+style: product
+size: [1280, 720]
+fps: 30
+duration: 12
+samples: 3
+shutter: 0.6
+audio: null
+background:
+  base: '#287af3'
+  lights:
+    - {x: 0.16, y: 0.12, radius: 0.9, color: '#b2ddff'}
+    - {x: 0.63, y: 0.35, radius: 0.76, color: '#f8fcff'}
+    - {x: 0.95, y: 0.9, radius: 0.4, color: '#80b7ff'}
+layers:
+  - id: repeated-question
+    type: text
+    width: 1120
+    height: 160
+    x: 640
+    y: 335
+    end: 2.8
+    text: Pertanyaan yang sama.
+    size: 58
+    weight: Medium
+    reveal: characters
+    keyframes:
+      progress: [[0, 0], [0.95, 1, linear]]
+      scale: [[0, 1.25], [0.8, 1, out_cubic], [2.05, 1], [2.65, 2.8, in_cubic]]
+      opacity: [[0, 1], [2.3, 1], [2.8, 0]]
+      blur: [[0, 0], [2.15, 0], [2.8, 13]]
+  - id: turn-to-knowledge
+    type: text
+    width: 1100
+    height: 130
+    x: 640
+    y: 335
+    start: 2.75
+    end: 4.7
+    text: Jadikan pengetahuan.
+    size: 54
+    weight: Medium
+    keyframes:
+      scale: [[2.75, 1.8], [3.2, 1, out_cubic], [4.1, 1], [4.6, 0.85]]
+      blur: [[2.75, 12], [3.18, 0], [4.2, 0], [4.7, 8]]
+      opacity: [[2.75, 0], [2.9, 1], [4.05, 1], [4.6, 0]]
+  - id: learning-bar
+    type: progress
+    width: 900
+    height: 80
+    x: 640
+    y: 335
+    start: 4.1
+    end: 6.3
+    label: Mempelajari jawaban...
+    keyframes:
+      progress: [[4.1, 0], [5.35, 1, linear]]
+      scale: [[4.1, 1.15], [4.5, 1, out_cubic], [5.05, 1], [5.95, 0.55, out_cubic]]
+      y: [[4.1, 335], [5.05, 335], [5.95, 133, out_cubic]]
+      opacity: [[4.1, 0], [4.3, 1], [6.05, 1], [6.3, 0]]
+  - id: workflow
+    type: panel
+    variant: workflow
+    width: 780
+    height: 430
+    x: 640
+    y: 400
+    start: 5.5
+    brand: Gilvy
+    badge: PRODUCT MOTION
+    title: Satu jawaban. Alur yang berulang.
+    items: [Kenali pertanyaan masuk, Temukan jawaban yang terverifikasi, Gunakan kembali saat dibutuhkan]
+    button: Simpan alur
+    shadow: true
+    keyframes:
+      y: [[5.5, 930], [6.45, 400, out_cubic]]
+      scale: [[5.5, 0.8], [6.45, 1, out_cubic]]
+      tilt_x: [[5.5, 28], [6.5, 0, out_cubic]]
+      tilt_y: [[5.5, -20], [6.5, 0, out_cubic]]
+      progress: [[5.5, 0], [6.6, 0.34], [7.45, 0.67], [8.3, 1]]
+      opacity: [[5.5, 0], [5.9, 1], [11.4, 1], [12, 0]]
+  - id: benefit
+    type: text
+    width: 1120
+    height: 90
+    x: 640
+    y: 102
+    start: 8.4
+    text: Selesai sekali. Bisa dipakai lagi.
+    size: 37
+    weight: Medium
+    reveal: words
+    keyframes:
+      progress: [[8.4, 0], [9.45, 1, linear]]
+      y: [[8.4, 120], [9.15, 102, out_cubic]]
+      opacity: [[8.4, 1], [11.4, 1], [12, 0]]
+  - id: cursor
+    type: cursor
+    width: 30
+    height: 40
+    x: 1100
+    y: 680
+    start: 8.7
+    keyframes:
+      x: [[8.7, 1100], [9.45, 948, out_cubic]]
+      y: [[8.7, 680], [9.45, 598, out_cubic]]
+      scale: [[8.7, 1], [9.5, 1], [9.6, 0.86], [9.75, 1]]
+      opacity: [[8.7, 0], [8.9, 1], [11.4, 1], [12, 0]]
+  - id: click-feedback
+    type: rect
+    width: 36
+    height: 36
+    x: 938
+    y: 581
+    start: 9.52
+    end: 10.2
+    fill: '#00000000'
+    border: '#168cf2'
+    radius: 18
+    keyframes:
+      scale: [[9.52, 0.5], [10.2, 2.6, out_cubic]]
+      opacity: [[9.52, 0.7], [10.2, 0]]

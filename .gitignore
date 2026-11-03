@@ -11,3 +11,4 @@ uploads/
 *.mp4
 *.wav
 !docs/*.png
+examples/product/study/fonts/
