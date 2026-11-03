@@ -746,3 +746,9 @@ class ProductFilm:
             1.055 * np.maximum(acc, 0) ** (1 / 2.4) - 0.055,
         )
         return Image.fromarray(np.clip(np.rint(rgb * 255), 0, 255).astype("uint8"))
+
+
+def product_notes():
+    """Installed authoring contract, including composition APIs and limitations."""
+    return "\n\n".join(Path(__file__).with_name(name).read_text(encoding="utf-8")
+                          for name in ("PRODUCT_MOTION.md", "COMPOSITION_RUNTIME.md"))

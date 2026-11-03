@@ -71,7 +71,7 @@ Use `inspect_product_frame(spec_path, frame, output)` for a native indexed PNG,
 compiled layer timing/state and measured text. `gilvy serve-product film.yaml`
 opens a local silent frame-seeking viewer; it is not a real-time/audio player.
 MCP `start_product_render`, `product_render_status`, `cancel_product_render`
-provide process-local observable jobs. Read [composition runtime](../../docs/composition-runtime.md)
+provide process-local observable jobs. Read [composition runtime](COMPOSITION_RUNTIME.md)
 for clocks, flow layout, particles, caching and job lifecycle limits.
 Preview directories must be new. Video files are published atomically only
 after encoding and integrity validation; an existing output is replaced only
@@ -283,7 +283,7 @@ Describe those as future capabilities rather than implying they are present.
 
 ## Composition tools
 
-Read [composition-runtime.md](../../docs/composition-runtime.md) for compiled
+Read [composition-runtime.md](COMPOSITION_RUNTIME.md) for compiled
 frame coverage, local/global timing, root particles, measured row/column groups,
 strict text fit/wrap, the local frame viewer and MCP render job lifecycle.
 Try `examples/product/composition.yaml` as a six-second technical diagnostic.

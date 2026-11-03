@@ -259,7 +259,8 @@ def run(argv: list[str] | None = None) -> int:
                 server.server_close()
             return 0
         if args.command == "product-notes":
-            print(Path(__file__).with_name("PRODUCT_MOTION.md").read_text())
+            from gilvy.product import product_notes
+            print(product_notes())
             return 0
         if args.command == "render-product":
             print(json.dumps(render_product(args.spec,args.out,args.start,args.duration),indent=2))

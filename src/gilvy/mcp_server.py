@@ -134,7 +134,8 @@ def serve() -> None:
 @mcp.tool()
 def product_motion_notes() -> str:
     """Read the opt-in product compositor schema, capabilities, limits and reference-study method."""
-    return Path(__file__).with_name("PRODUCT_MOTION.md").read_text(encoding="utf-8")
+    from gilvy.product import product_notes
+    return product_notes()
 
 
 @mcp.tool()

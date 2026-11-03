@@ -249,3 +249,11 @@ def test_mcp_job_reaches_completed_with_real_verified_video(tmp_path):
     assert status["rendered_frames"]==status["total_frames"]==2
     assert status["result"]["qc"]["ok"]
     assert not json.loads(cancel_product_render(started["job_id"]))["cancel_requested"]
+
+
+def test_installed_notes_include_full_composition_contract(capsys):
+    from gilvy.mcp_server import product_motion_notes
+    notes=product_motion_notes()
+    assert "## Timing contract" in notes and "## Observable product render jobs" in notes
+    assert run(["product-notes"])==0
+    assert capsys.readouterr().out.rstrip()==notes.rstrip()
