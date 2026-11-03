@@ -119,8 +119,8 @@ For SaaS/UI films use a separate `style: product` YAML, not a restyled explainer
 
 ```bash
 gilvy product-notes
-gilvy preview-product examples/product/learning.yaml --out out/product-stills
-gilvy render-product examples/product/learning.yaml --out out/product.mp4
+gilvy preview-product examples/product/inbox.yaml --out out/product-stills
+gilvy render-product examples/product/inbox.yaml --out out/product.mp4
 ```
 
 The CPU compositor supports code-drawn inbox/form/workflow/dropdown UI, text
@@ -131,6 +131,11 @@ optional; silent is the default. See the [schema and limits](src/gilvy/PRODUCT_M
 The existing explainer renderer and its style/QC are unchanged. Product renders
 use decoded frame-count/dimension/duration/audio integrity checks, not house
 green-ratio rules or a creative-quality score.
+
+The revised [inbox visual system](docs/product-design.md) provides a coherent
+four-column product screen with independently staged source and reply states,
+measured text layout and explicit design tokens. The first learning proof is
+a renderer diagnostic, not the standard for UI visual quality.
 
 ## Color
 

@@ -1,0 +1,235 @@
+# Fictional support UI: inspect -> find source -> draft -> send -> overview.
+style: product
+size:
+- 1440
+- 900
+fps: 30
+duration: 8
+samples: 3
+shutter: 0.4
+audio: null
+background:
+  base: '#eef1f6'
+  lights:
+  - x: 0.6
+    y: 0.2
+    radius: 1.1
+    color: '#fafbfe'
+layers:
+- id: workspace
+  type: group
+  width: 1280
+  height: 760
+  x: 720
+  y: 450
+  shadow: true
+  children:
+  - id: shell
+    type: inbox-part
+    part: shell
+    width: 1280
+    height: 760
+    x: 640.0
+    y: 380.0
+  - id: sidebar
+    type: inbox-part
+    part: sidebar
+    width: 180
+    height: 760
+    x: 90.0
+    y: 380.0
+  - id: conversations
+    type: inbox-part
+    part: conversations
+    width: 300
+    height: 696
+    x: 330.0
+    y: 412.0
+  - id: thread
+    type: inbox-part
+    part: thread
+    width: 520
+    height: 696
+    x: 740.0
+    y: 412.0
+  - id: customer
+    type: inbox-part
+    part: customer
+    width: 280
+    height: 256
+    x: 1140.0
+    y: 192.0
+  - id: knowledge
+    type: inbox-part
+    part: knowledge
+    width: 280
+    height: 440
+    x: 1140.0
+    y: 540.0
+    start: 2.15
+    keyframes:
+      opacity:
+      - - 2.15
+        - 0
+      - - 2.35
+        - 1
+        - out_cubic
+      x:
+      - - 2.15
+        - 1152.0
+      - - 2.35
+        - 1140.0
+        - out_cubic
+  - id: reply
+    type: inbox-part
+    part: reply
+    width: 472
+    height: 214
+    x: 740.0
+    y: 625.0
+    start: 4
+    end: 5.9
+    keyframes:
+      opacity:
+      - - 4
+        - 0
+      - - 4.2
+        - 1
+        - out_cubic
+      y:
+      - - 4
+        - 633.0
+      - - 4.2
+        - 625.0
+        - out_cubic
+  - id: sent-reply
+    type: inbox-part
+    part: reply
+    width: 472
+    height: 214
+    x: 740.0
+    y: 625.0
+    start: 5.75
+    content:
+      sent: true
+    keyframes:
+      opacity:
+      - - 5.75
+        - 0
+      - - 5.9
+        - 1
+        - out_cubic
+  - id: pointer
+    type: cursor
+    width: 26
+    height: 34
+    x: 341
+    y: 278
+    start: 0.7
+    keyframes:
+      opacity:
+      - - 0.7
+        - 0
+      - - 0.9
+        - 1
+      - - 6.1
+        - 1
+      - - 6.3
+        - 0
+      x:
+      - - 0.7
+        - 400
+      - - 1.35
+        - 341
+        - out_cubic
+      - - 2.2
+        - 341
+      - - 3
+        - 1156
+        - smooth
+      - - 3.5
+        - 1156
+      - - 5.3
+        - 916
+        - smooth
+      y:
+      - - 0.7
+        - 400
+      - - 1.35
+        - 278
+        - out_cubic
+      - - 2.2
+        - 278
+      - - 3
+        - 450
+        - smooth
+      - - 3.5
+        - 450
+      - - 5.3
+        - 725
+        - smooth
+      scale:
+      - - 0.7
+        - 1
+      - - 5.65
+        - 1
+      - - 5.73
+        - 0.96
+      - - 5.85
+        - 1
+  keyframes:
+    scale:
+    - - 0
+      - 0.94
+    - - 0.6
+      - 0.98
+      - out_cubic
+    - - 1.5
+      - 0.98
+    - - 2.8
+      - 1.16
+      - smooth
+    - - 3.5
+      - 1.16
+    - - 4.8
+      - 1.46
+      - smooth
+    - - 6.1
+      - 1.46
+    - - 7.3
+      - 0.98
+      - smooth
+    x:
+    - - 0
+      - 720
+    - - 1.5
+      - 720
+    - - 2.8
+      - 576
+      - smooth
+    - - 3.5
+      - 576
+    - - 4.8
+      - 570
+      - smooth
+    - - 6.1
+      - 570
+    - - 7.3
+      - 720
+      - smooth
+    y:
+    - - 0
+      - 466
+    - - 0.6
+      - 450
+      - out_cubic
+    - - 3.5
+      - 450
+    - - 4.8
+      - 230
+      - smooth
+    - - 6.1
+      - 230
+    - - 7.3
+      - 450
+      - smooth

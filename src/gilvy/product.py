@@ -12,6 +12,7 @@ from PIL import Image, ImageFilter
 
 from gilvy.errors import GilvyError
 from gilvy.product_ui import color, component
+from gilvy.product_design import PARTS, DEFAULT_CONTENT
 
 
 DEFAULTS = {
@@ -31,7 +32,7 @@ EASES = {
     "out_cubic": lambda t: 1 - (1 - t) ** 3,
     "in_cubic": lambda t: t**3,
 }
-KINDS = {"text", "rect", "progress", "cursor", "panel", "menu", "group"}
+KINDS = {"text", "rect", "progress", "cursor", "panel", "menu", "group", "inbox-part"}
 PROPS = {
     "id",
     "type",
@@ -62,6 +63,8 @@ PROPS = {
     "subtitle",
     "button",
     "selected",
+    "content",
+    "part",
     *DEFAULTS,
 }
 
@@ -166,6 +169,21 @@ def validate(spec):
             ids.add(identifier)
             if len(ids) > 100:
                 raise GilvyError("product film supports at most 100 layers")
+            if node["type"] == "inbox-part" and (
+                not isinstance(node.get("part"), str) or node["part"] not in PARTS
+            ):
+                raise GilvyError("inbox-part requires a known part name")
+            content = node.get("content", {})
+            if not isinstance(content, dict) or set(content) - set(DEFAULT_CONTENT):
+                raise GilvyError("unknown inbox content fields")
+            for key, value in content.items():
+                if key == "sent":
+                    if not isinstance(value, bool):
+                        raise GilvyError("sent must be boolean")
+                elif not isinstance(value, str) or len(value) > 1000:
+                    raise GilvyError(
+                        "inbox content must be text of at most 1000 characters"
+                    )
             for prop in ("width", "height"):
                 if type(node.get(prop)) != int or not 1 <= node[prop] <= 4096:
                     raise GilvyError(f"layer {identifier}: {prop} must be 1..4096")
@@ -421,7 +439,9 @@ class ProductFilm:
                 self.paint(node["children"], image, t)
             else:
                 dynamic = (
-                    node["type"] in ("progress", "menu")
+                    node["type"] == "inbox-part"
+                    and node.get("part") == "reply"
+                    or node["type"] in ("progress", "menu")
                     or node.get("reveal", "none") != "none"
                     or node.get("variant") == "workflow"
                 )

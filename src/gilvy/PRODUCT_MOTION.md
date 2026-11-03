@@ -20,6 +20,10 @@ UI, not extracted Numtera artwork. It does not reproduce the entire reference.
 
 ## Commands and MCP
 
+For the revised UI visual reference, start with `examples/product/inbox.yaml`
+and [the design review](../../docs/product-design.md). The older learning proof
+is a renderer diagnostic, not the product design standard.
+
 ```bash
 gilvy product-notes
 gilvy preview-product examples/product/learning.yaml --out out/product-stills --times 1.3 4.8 6.5 9.8
@@ -89,6 +93,11 @@ text deliberately larger than its plane will crop. Inspect at delivery size.
 | `menu` | title, items, selected, accent | Dropdown surface; progress reveals rows |
 | `panel` | variant, brand, mark, badge, title, items, accent, fill | Shared UI frame; variants inbox/form/workflow |
 | `group` | children | Compose child planes, then transform/clip the whole group |
+| `inbox-part` | part, content | Native inbox surfaces: shell, sidebar, conversations, thread, customer, knowledge, reply |
+
+Detailed inbox panels accept `content` fields documented in the design review.
+They use the same measured layout as independently animated inbox parts. Use
+native 1280x760 for a full reference; smaller planes scale it and do not reflow.
 
 Inbox panels accept `navigation` and `subtitle`. Form `items` use
 `Label: Value` strings and accept `button`. Workflow items are numbered steps

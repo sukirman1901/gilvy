@@ -5,6 +5,7 @@ from functools import lru_cache
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from gilvy.theme import bundled_fonts
+from gilvy.product_design import inbox, inbox_part
 
 
 @lru_cache(maxsize=256)
@@ -31,6 +32,14 @@ def component(node, progress=1.0):
     d = ImageDraw.Draw(im)
     kind = node["type"]
     accent = node.get("accent", "#178cf2")
+    if kind == "inbox-part":
+        return inbox_part(node["part"], node.get("content"), progress).resize(
+            (w, h), Image.Resampling.LANCZOS
+        )
+    if kind == "panel" and node.get("variant", "inbox") == "inbox":
+        return inbox(node.get("content"), progress).resize(
+            (w, h), Image.Resampling.LANCZOS
+        )
     if kind == "text":
         value = node.get("text", "")
         reveal = node.get("reveal", "none")
@@ -119,47 +128,7 @@ def component(node, progress=1.0):
         text(d, (56, 18), node.get("brand", "Gilvy"), 17, accent, "SemiBold")
         text(d, (w - 127, 21), node.get("badge", "WORKSPACE"), 9, "#73859a", "SemiBold")
         variant = node.get("variant", "inbox")
-        if variant == "inbox":
-            side = 145
-            d.line((side, 58, side, h), fill="#e7edf5", width=1)
-            for i, label in enumerate(
-                node.get("navigation", ["Inbox", "Knowledge", "Workflows", "Settings"])
-            ):
-                y = 83 + i * 39
-                if i == 0:
-                    d.rounded_rectangle(
-                        (13, y - 5, side - 12, y + 25), radius=7, fill="#e8f4ff"
-                    )
-                text(d, (28, y), label, 12, accent if i == 0 else "#8493a5")
-            text(
-                d,
-                (side + 24, 78),
-                node.get("title", "Conversations"),
-                22,
-                weight="SemiBold",
-            )
-            for i, row in enumerate(node.get("items", [])[:6]):
-                y = 126 + i * 57
-                if y + 48 > h:
-                    break
-                d.rounded_rectangle(
-                    (side + 15, y, w - 17, y + 49),
-                    radius=8,
-                    fill="#f3f8fe" if i == 0 else "#ffffff",
-                )
-                d.ellipse(
-                    (side + 26, y + 12, side + 51, y + 37),
-                    fill=["#c2e9ff", "#d8d4ff", "#c4eedb"][i % 3],
-                )
-                text(d, (side + 62, y + 6), row, 12, weight="SemiBold")
-                text(
-                    d,
-                    (side + 62, y + 27),
-                    node.get("subtitle", "A clear next step."),
-                    10,
-                    "#8493a5",
-                )
-        elif variant == "form":
+        if variant == "form":
             text(d, (25, 78), node.get("title", "Edit workflow"), 23, weight="SemiBold")
             for i, row in enumerate(node.get("items", [])[:3]):
                 y = 125 + i * 72
