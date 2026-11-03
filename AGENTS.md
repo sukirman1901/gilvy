@@ -28,6 +28,12 @@ Use `--tts fixture` only to check layout without the network. The voice you ship
 
 ## Tools
 
+For a supplied reference, run `gilvy analyze-reference` / MCP `analyze_reference`
+on a local video and follow `docs/reference-analysis.md`. Inspect all motion
+clips before describing its style; a title or contact sheet is insufficient.
+Separate observations from inferred camera/easing/layers. Reference study does
+not apply the house palette or certify fidelity; name unsupported capabilities.
+
 `gilvy render`, `gilvy preview`, `gilvy preview-motion`, `gilvy compare`, `gilvy qc`, `gilvy new`, `gilvy mcp`.
 
 Visual components: `gilvy elements` / `list_visual_elements`. Read `gilvy motion-reference` / `motion_reference` for the API and approved Bojonegoro study. Components are used inside Python scenes; they are not new scene types.
