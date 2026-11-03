@@ -1,5 +1,12 @@
 # gilvy
 
+Explicit SaaS/product motion uses the opt-in `style: product` compositor.
+Read `src/gilvy/PRODUCT_MOTION.md` / MCP `product_motion_notes`; use
+`preview-product` and `render-product`. House palette, fitted canvas, caption
+baseline and stationary-camera rules below apply to the existing explainer
+path. Product films have a separate native canvas and technical integrity QC.
+Inspect a short encoded proof; effects alone do not establish reference fidelity.
+
 Read `skills/gilvy/SKILL.md` and `src/gilvy/DIRECTING.md` before writing or rendering an episode. Direct the picture (object, verb, carry, meaning, consequence) before you pick a scene type. This file is the short version.
 
 gilvy makes faceless 9:16 explainers. You write a YAML episode. The picture system (canvas, easing, glow, caption position, encode) is fixed so every video looks like the same show.

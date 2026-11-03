@@ -113,6 +113,25 @@ video; it does not download URLs, understand a style automatically, or recover
 editable layers/keyframes. Watch all clips and separate observation from
 inference before reconstructing. See [reference analysis](docs/reference-analysis.md).
 
+## Opt-in product motion
+
+For SaaS/UI films use a separate `style: product` YAML, not a restyled explainer:
+
+```bash
+gilvy product-notes
+gilvy preview-product examples/product/learning.yaml --out out/product-stills
+gilvy render-product examples/product/learning.yaml --out out/product.mp4
+```
+
+The CPU compositor supports code-drawn inbox/form/workflow/dropdown UI, text
+reveals, groups, gradient light fields, projected perspective planes, shadows,
+layer blur and linear-light temporal supersampling. MCP exposes
+`product_motion_notes`, `preview_product` and `render_product`. Local audio is
+optional; silent is the default. See the [schema and limits](src/gilvy/PRODUCT_MOTION.md).
+The existing explainer renderer and its style/QC are unchanged. Product renders
+use decoded frame-count/dimension/duration/audio integrity checks, not house
+green-ratio rules or a creative-quality score.
+
 ## Color
 
 Green is one number: the money figure, or a count and the counter that repeats it. Rings, bowls, tracks, and captions stay white. Setup and the CTA may use no green at all. Measurements and the full rule are in `docs/color-rule.md`.

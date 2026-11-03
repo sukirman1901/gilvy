@@ -16,6 +16,7 @@ from gilvy.qc import qc_video
 from gilvy.render import preview_episode, render_episode, preview_motion as _preview_motion
 from gilvy.review import compare_versions as _compare_versions
 from gilvy.reference import analyze_reference as _analyze_reference
+from gilvy.product_render import render_product as _render_product, preview_product as _preview_product
 from gilvy.scenes import catalog
 from gilvy.elements import element_catalog, motion_reference_notes
 
@@ -24,6 +25,9 @@ _DIRECTING = Path(__file__).resolve().parent / "DIRECTING.md"
 mcp = FastMCP(
     "gilvy",
     instructions=(
+        "For explicitly requested SaaS/product motion, call product_motion_notes and use "
+        "preview_product/render_product with style: product. House palette/caption/camera "
+        "rules below apply only to the existing explainer path, not the opt-in product compositor. "
         "You direct a gilvy episode. You do not fill a scene-type form. "
         "Call directing_notes first and name an object, a physical verb, and what carries "
         "from the previous scene for every line. Pick a library type only when its verb "
@@ -119,6 +123,40 @@ def list_scene_types() -> str:
 
 def serve() -> None:
     mcp.run(transport="stdio")
+
+
+@mcp.tool()
+def product_motion_notes() -> str:
+    """Read the opt-in product compositor schema, capabilities, limits and reference-study method."""
+    return Path(__file__).with_name("PRODUCT_MOTION.md").read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def render_product(spec_path: str, output: str, start: float = 0, duration: float | None = None) -> str:
+    """Render a style: product YAML film or a clock-preserving window. No house style QC or TTS.
+
+    Supports layers/groups, code-drawn UI, word/character reveal, gradients,
+    perspective planes, shadows, layer blur and temporal supersampling. Optional
+    local audio is trimmed/padded to the video; default is silent. Integrity QC
+    decodes/counts the encoded frames; creative review is still required.
+    """
+    try:
+        result=_render_product(spec_path,output,start,duration)
+        return json.dumps({"ok":True,**result})
+    except GilvyError as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def preview_product(spec_path: str, output_dir: str, times: list[float] | None = None) -> str:
+    """Render timestamped product stills/contact sheet. Choose a new output directory.
+
+    Stills inspect geometry/type; also render a short window to review transitions.
+    """
+    try:
+        return json.dumps({"ok":True,**_preview_product(spec_path,output_dir,times)})
+    except GilvyError as exc:
+        return _fail(exc)
 
 
 @mcp.tool()

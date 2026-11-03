@@ -14,6 +14,7 @@ from gilvy.qc import qc_video
 from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
 from gilvy.review import compare_versions
 from gilvy.reference import analyze_reference
+from gilvy.product_render import render_product, preview_product
 from gilvy.elements import element_catalog, motion_reference_notes
 
 _TEMPLATE = """\
@@ -202,12 +203,32 @@ def run(argv: list[str] | None = None) -> int:
     reference.add_argument("--clip-seconds", type=float, default=8)
     reference.add_argument("--width", type=int, default=640)
 
+    product = sub.add_parser("render-product", help="render an opt-in product motion film")
+    product.add_argument("spec")
+    product.add_argument("--out", required=True)
+    product.add_argument("--start", type=float, default=0)
+    product.add_argument("--duration", type=float)
+    pp = sub.add_parser("preview-product", help="timestamped stills of a product film")
+    pp.add_argument("spec")
+    pp.add_argument("--out", required=True)
+    pp.add_argument("--times", nargs="+", type=float)
+    sub.add_parser("product-notes", help="read product motion schema and directing guidance")
+
     sub.add_parser("elements", help="list composable visual elements and their verbs")
     sub.add_parser("motion-reference", help="read visual vocabulary and Bojonegoro motion study")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "product-notes":
+            print(Path(__file__).with_name("PRODUCT_MOTION.md").read_text())
+            return 0
+        if args.command == "render-product":
+            print(json.dumps(render_product(args.spec,args.out,args.start,args.duration),indent=2))
+            return 0
+        if args.command == "preview-product":
+            print(json.dumps(preview_product(args.spec,args.out,args.times),indent=2))
+            return 0
         if args.command == "analyze-reference":
             print(json.dumps(analyze_reference(args.video, args.out, args.threshold, args.min_scene,
                                               args.boundaries, args.clip_seconds, args.width), indent=2))
