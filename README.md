@@ -99,6 +99,20 @@ explicitly report `scope: technical` and `creative_review: not_evaluated`.
 Creative quality still requires watching and evaluating the piece. See
 [creative-review.md](skills/gilvy/references/creative-review.md) for examples.
 
+## Extract a motion reference
+
+```bash
+gilvy analyze-reference reference.mp4 --out out/reference-study
+```
+
+CLI `analyze-reference` / MCP `analyze_reference` produce provisional cut
+boundaries, timestamped frames, paginated contact sheets, full-coverage motion
+clips with transition handles and source audio, plus a JSON manifest and review
+worksheet. Manual boundaries can override the heuristic. This studies local
+video; it does not download URLs, understand a style automatically, or recover
+editable layers/keyframes. Watch all clips and separate observation from
+inference before reconstructing. See [reference analysis](docs/reference-analysis.md).
+
 ## Color
 
 Green is one number: the money figure, or a count and the counter that repeats it. Rings, bowls, tracks, and captions stay white. Setup and the CTA may use no green at all. Measurements and the full rule are in `docs/color-rule.md`.

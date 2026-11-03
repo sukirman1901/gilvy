@@ -15,6 +15,7 @@ from gilvy.errors import GilvyError
 from gilvy.qc import qc_video
 from gilvy.render import preview_episode, render_episode, preview_motion as _preview_motion
 from gilvy.review import compare_versions as _compare_versions
+from gilvy.reference import analyze_reference as _analyze_reference
 from gilvy.scenes import catalog
 from gilvy.elements import element_catalog, motion_reference_notes
 
@@ -33,6 +34,10 @@ mcp = FastMCP(
         "Then preview_frames and preview_motion; watch the clip before render_video. "
         "Use compare_versions to inspect approved material when extending a cut. "
         "QC is technical only and never creative approval. "
+        "For a supplied reference, analyze_reference extracts local video evidence. "
+        "Inspect all motion clips before describing its style; titles and stills are insufficient. "
+        "Keep observed facts separate from inferred camera/easing/layers; no source layers are recovered. "
+        "House rules constrain authored episodes, not descriptions of supplied references. "
         "Green is one quantity. Captions stay white. Do not restyle the canvas."
     ),
 )
@@ -114,6 +119,32 @@ def list_scene_types() -> str:
 
 def serve() -> None:
     mcp.run(transport="stdio")
+
+
+@mcp.tool()
+def analyze_reference(video_path: str, output_dir: str, threshold: float = .3,
+                      min_scene: float = .8, scene_boundaries: list[float] | None = None,
+                      clip_seconds: float = 8, width: int = 640) -> str:
+    """Extract a local reference video (<=10min) into evidence, not recovered animation code.
+
+    Creates candidate cuts, timestamped frames, contact sheets, full-coverage motion
+    clips with .25s transition handles and original audio, a JSON manifest and a
+    review worksheet. output_dir must not exist. None detects cuts; a sorted list
+    of interior seconds overrides detection; [] keeps one scene. Long scenes are
+    split into viewing chunks without claiming extra scene boundaries.
+    Watch every clip before filling observed/inferred fields. No downloader, OCR,
+    semantic scene detection, easing, layer recovery or creative approval runs.
+    """
+    try:
+        result = _analyze_reference(video_path, output_dir, threshold, min_scene,
+                                    scene_boundaries, clip_seconds, width)
+        # Return compact navigation, not hundreds of frame paths in the context.
+        return json.dumps({"ok": True, "manifest": result["manifest"], "review": result["review"],
+                           "contact_sheets": result["contact_sheets"], "scene_count": len(result["scenes"]),
+                           "clip_count": sum(len(s["clips"]) for s in result["scenes"]),
+                           "creative_review": "required", "limitations": result["limitations"]})
+    except GilvyError as exc:
+        return _fail(exc)
 
 
 @mcp.tool()

@@ -13,6 +13,7 @@ from gilvy.formats import get_profile
 from gilvy.qc import qc_video
 from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
 from gilvy.review import compare_versions
+from gilvy.reference import analyze_reference
 from gilvy.elements import element_catalog, motion_reference_notes
 
 _TEMPLATE = """\
@@ -191,12 +192,26 @@ def run(argv: list[str] | None = None) -> int:
     compare.add_argument("--duration", type=float, default=8)
     compare.add_argument("--sample-fps", type=float, default=2)
 
+    reference = sub.add_parser("analyze-reference", help="extract local reference video into scene evidence")
+    reference.add_argument("video")
+    reference.add_argument("--out", required=True, help="new output directory")
+    reference.add_argument("--threshold", type=float, default=.3)
+    reference.add_argument("--min-scene", type=float, default=.8)
+    reference.add_argument("--boundaries", type=float, nargs="*", default=None,
+                           help="manual interior scene times; empty means one scene")
+    reference.add_argument("--clip-seconds", type=float, default=8)
+    reference.add_argument("--width", type=int, default=640)
+
     sub.add_parser("elements", help="list composable visual elements and their verbs")
     sub.add_parser("motion-reference", help="read visual vocabulary and Bojonegoro motion study")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "analyze-reference":
+            print(json.dumps(analyze_reference(args.video, args.out, args.threshold, args.min_scene,
+                                              args.boundaries, args.clip_seconds, args.width), indent=2))
+            return 0
         if args.command == "elements":
             print(json.dumps(element_catalog(), indent=2))
             return 0
