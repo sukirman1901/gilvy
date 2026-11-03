@@ -6,6 +6,10 @@ Read `src/gilvy/PRODUCT_MOTION.md` / MCP `product_motion_notes`; use
 baseline and stationary-camera rules below apply to the existing explainer
 path. Product films have a separate native canvas and technical integrity QC.
 Inspect a short encoded proof; effects alone do not establish reference fidelity.
+Product UI presets are optional. Compose general text/counter/path/shape/image
+layers and masked groups for new designs. The AI owns composition and
+choreography; the engine owns precise reusable drawing and animation tools.
+Follow the evidence/review contract in PRODUCT_MOTION.md before a full film.
 
 Read `skills/gilvy/SKILL.md` and `src/gilvy/DIRECTING.md` before writing or rendering an episode. Direct the picture (object, verb, carry, meaning, consequence) before you pick a scene type. This file is the short version.
 

@@ -14,6 +14,9 @@ from PIL import Image, ImageFilter
 from gilvy.errors import GilvyError
 from gilvy.product_ui import color, component
 from gilvy.product_design import PARTS, DEFAULT_CONTENT
+from gilvy.product_primitives import (
+    text_plane, shape_plane, clip_plane, filter_plane, average_planes, typeface,
+)
 
 
 DEFAULTS = {
@@ -26,6 +29,18 @@ DEFAULTS = {
     "opacity": 1.0,
     "blur": 0.0,
     "progress": 1.0,
+    "value": 0.0,
+    "clip_x": 0.0,
+    "clip_y": 0.0,
+    "clip_width": 1.0,
+    "clip_height": 1.0,
+    "clip_radius": 0.0,
+    "pivot_x": 0.5,
+    "pivot_y": 0.5,
+    "scale_x": 1.0,
+    "scale_y": 1.0,
+    "blur_length": 0.0,
+    "blur_angle": 0.0,
 }
 EASES = {
     "linear": lambda t: t,
@@ -43,6 +58,9 @@ KINDS = {
     "group",
     "inbox-part",
     "image",
+    "counter",
+    "ellipse",
+    "path",
 }
 PROPS = {
     "id",
@@ -77,6 +95,9 @@ PROPS = {
     "content",
     "part",
     "src",
+    "font", "align", "valign", "baseline", "padding", "line_height",
+    "letter_spacing", "overflow", "decimals", "decimal_separator", "prefix", "suffix",
+    "commands", "stroke", "stroke_width", "samples", "shutter",
     *DEFAULTS,
 }
 
@@ -97,22 +118,49 @@ def interpolate(keys, t, default=0):
     for a, b in zip(keys, keys[1:]):
         if t < b[0]:
             u = (t - a[0]) / (b[0] - a[0])
-            u = EASES[b[2] if len(b) == 3 else "smooth"](u)
+            u = ease(b[2] if len(b) == 3 else "smooth", u)
             return a[1] + (b[1] - a[1]) * u
     return float(keys[-1][1])
+
+
+def valid_ease(value):
+    if isinstance(value, str):
+        return value in EASES
+    return (isinstance(value, list) and len(value) == 4
+            and all(finite(v) and abs(v) <= 8 for v in value)
+            and 0 <= value[0] <= 1 and 0 <= value[2] <= 1)
+
+
+def ease(curve, u):
+    if isinstance(curve, str):
+        return EASES[curve](u)
+    x1,y1,x2,y2=curve
+    def bez(a,b,t): return 3*(1-t)**2*t*a+3*(1-t)*t*t*b+t**3
+    lo,hi=0.0,1.0
+    for _ in range(30):
+        mid=(lo+hi)/2
+        if bez(x1,x2,mid)<u: lo=mid
+        else: hi=mid
+    return bez(y1,y2,(lo+hi)/2)
 
 
 def _range(prop, value):
     if not finite(value):
         return False
-    if prop in ("opacity", "progress"):
+    if prop in ("opacity", "progress", "clip_x", "clip_y", "clip_width", "clip_height", "pivot_x", "pivot_y"):
         return 0 <= value <= 1
-    if prop == "scale":
+    if prop in ("scale", "scale_x", "scale_y"):
         return 0.01 <= value <= 8
     if prop in ("tilt_x", "tilt_y"):
         return abs(value) <= 65
     if prop == "blur":
         return 0 <= value <= 40
+    if prop == "blur_length":
+        return 0 <= value <= 128
+    if prop == "clip_radius":
+        return 0 <= value <= 2048
+    if prop == "value":
+        return abs(value) <= 1e15
     return abs(value) <= 8192
 
 
@@ -166,7 +214,7 @@ def validate(spec):
     ids = set()
     pixels = 0
 
-    def walk(nodes, depth=0):
+    def walk(nodes, depth=0, sample_budget=1):
         nonlocal pixels
         if depth > 6:
             raise GilvyError("group nesting exceeds six levels")
@@ -175,6 +223,10 @@ def validate(spec):
                 raise GilvyError("unknown product component")
             if set(node) - PROPS:
                 raise GilvyError(f"unknown layer fields: {sorted(set(node)-PROPS)}")
+            validate_tools(node)
+            branch_samples=sample_budget*node.get('samples',1)
+            if branch_samples>8:
+                raise GilvyError('nested layer sampling exceeds eight samples per branch')
             identifier = node.get("id")
             if not isinstance(identifier, str) or identifier in ids:
                 raise GilvyError("layer ids must be unique strings")
@@ -254,11 +306,11 @@ def validate(spec):
                     if (
                         not _range(prop, key[1])
                         or len(key) == 3
-                        and (not isinstance(key[2], str) or key[2] not in EASES)
+                        and not valid_ease(key[2])
                     ):
                         raise GilvyError(f"invalid {prop} keyframe/easing")
                     previous = key[0]
-            for prop in ("color", "accent", "fill", "border"):
+            for prop in ("color", "accent", "fill", "border", "stroke"):
                 if node.get(prop) is not None:
                     try:
                         if not isinstance(node[prop], str):
@@ -304,7 +356,7 @@ def validate(spec):
             if node["type"] == "group":
                 if not isinstance(node.get("children"), list):
                     raise GilvyError("group requires children")
-                walk(node["children"], depth + 1)
+                walk(node["children"], depth + 1, branch_samples)
 
     walk(spec["layers"])
     bg = spec.get("background", {})
@@ -312,15 +364,69 @@ def validate(spec):
         raise GilvyError("invalid background")
     try:
         color(bg.get("base", "#f2f7ff"))
-        for light in bg.get("lights", []):
+        lights = bg.get("lights", [])
+        if not isinstance(lights, list) or len(lights)>16:
+            raise ValueError("lights must be a list of at most sixteen")
+        for light in lights:
+            if not isinstance(light, dict) or set(light)-{'x','y','radius','color','keyframes'}:
+                raise ValueError("unknown light fields")
             color(light["color"])
             if (
                 any(not finite(light[k]) for k in ("x", "y", "radius"))
                 or not 0.05 <= light["radius"] <= 3
             ):
                 raise ValueError("invalid light geometry")
+            tracks=light.get('keyframes',{})
+            if not isinstance(tracks,dict) or set(tracks)-{'x','y','radius','red','green','blue'}:
+                raise ValueError('invalid light tracks')
+            for prop,keys in tracks.items():
+                previous=-1
+                if not isinstance(keys,list) or not keys: raise ValueError('empty light track')
+                for key in keys:
+                    if (not isinstance(key,list) or len(key) not in (2,3)
+                        or not finite(key[0]) or not previous < key[0] <= duration
+                        or key[0]<0 or not finite(key[1])
+                        or (prop=='radius' and not .05<=key[1]<=3)
+                        or (prop in ('red','green','blue') and not 0<=key[1]<=255)
+                        or (prop in ('x','y') and abs(key[1])>8)
+                        or (len(key)==3 and not valid_ease(key[2]))):
+                        raise ValueError('invalid light keyframe')
+                    previous=key[0]
     except (KeyError, ValueError, TypeError) as exc:
         raise GilvyError("invalid gradient light") from exc
+
+
+def validate_tools(node):
+    for prop in ('font','prefix','suffix'):
+        if prop in node and (not isinstance(node[prop],str) or len(node[prop])>4096):
+            raise GilvyError(f'{prop} must be text')
+    if 'font' in node and (not node['font'] or '://' in node['font']):
+        raise GilvyError('font must be a local filename')
+    for prop, choices in [('align',('left','center','right')),('valign',('top','center','bottom')),
+                          ('overflow',('clip','error')),('decimal_separator',('.',','))]:
+        if prop in node and node[prop] not in choices: raise GilvyError(f'invalid {prop}')
+    for prop,lo,hi in [('padding',0,2048),('baseline',-4096,8192),('line_height',.5,5),
+                      ('letter_spacing',-20,100),('stroke_width',.1,512)]:
+        if prop in node and (not finite(node[prop]) or not lo<=node[prop]<=hi):
+            raise GilvyError(f'invalid {prop}')
+    if type(node.get('decimals',0)) is not int or not 0<=node.get('decimals',0)<=6:
+        raise GilvyError('decimals must be an integer from zero to six')
+    if (type(node.get('samples',1)) is not int or not 1<=node.get('samples',1)<=8
+        or not finite(node.get('shutter',.5)) or not 0<=node.get('shutter',.5)<=1):
+        raise GilvyError('layer samples: 1..8; shutter: 0..1 frame')
+    if node.get('type')=='path':
+        commands=node.get('commands')
+        if not isinstance(commands,list) or not 2<=len(commands)<=2048:
+            raise GilvyError('path requires 2..2048 M/L/Q/C/Z commands')
+        opened=False
+        for cmd in commands:
+            if (not isinstance(cmd,list) or not cmd or not isinstance(cmd[0],str)
+                or cmd[0] not in {'M','L','Q','C','Z'}
+                or len(cmd)!={'M':3,'L':3,'Q':5,'C':7,'Z':1}[cmd[0]]
+                or any(not finite(v) or abs(v)>8192 for v in cmd[1:])
+                or (cmd[0]!='M' and not opened)):
+                raise GilvyError('invalid path command or missing M')
+            if cmd[0]=='M':opened=True
 
 
 def load_product(path):
@@ -333,7 +439,7 @@ def load_product(path):
     return ProductFilm(spec, p.parent)
 
 
-def gradient(size, background):
+def gradient(size, background, t=0):
     # Low-res Gaussian light fields are deliberately smooth, then upsampled.
     w, h = size
     sw, sh = 256, max(16, round(256 * h / w))
@@ -342,10 +448,16 @@ def gradient(size, background):
     y /= sh
     rgb = np.zeros((sh, sw, 3)) + np.array(color(background.get("base", "#f2f7ff"))[:3])
     for light in background.get("lights", []):
+        tracks=light.get('keyframes',{})
+        lx=interpolate(tracks.get('x'),t,light['x'])
+        ly=interpolate(tracks.get('y'),t,light['y'])
+        radius=max(.05,interpolate(tracks.get('radius'),t,light['radius']))
+        base_color=color(light['color'])[:3]
+        tint=np.clip([interpolate(tracks.get(k),t,v) for k,v in zip(('red','green','blue'),base_color)],0,255)
         a = np.exp(
-            -2 * ((x - light["x"]) ** 2 + (y - light["y"]) ** 2) / light["radius"] ** 2
+            -2 * ((x - lx) ** 2 + (y - ly) ** 2) / radius ** 2
         )[..., None]
-        rgb = rgb * (1 - a) + np.array(color(light["color"])[:3]) * a
+        rgb = rgb * (1 - a) + tint * a
     return (
         Image.fromarray(np.clip(rgb, 0, 255).astype("uint8"))
         .resize((w, h), Image.Resampling.BICUBIC)
@@ -358,15 +470,16 @@ def project(size, state):
     pts = (
         np.array(
             [
-                [-w / 2, -h / 2, 0],
-                [w / 2, -h / 2, 0],
-                [w / 2, h / 2, 0],
-                [-w / 2, h / 2, 0],
+                [-w*state['pivot_x'], -h*state['pivot_y'], 0],
+                [w*(1-state['pivot_x']), -h*state['pivot_y'], 0],
+                [w*(1-state['pivot_x']), h*(1-state['pivot_y']), 0],
+                [-w*state['pivot_x'], h*(1-state['pivot_y']), 0],
             ],
             float,
         )
         * state["scale"]
     )
+    pts *= [state['scale_x'],state['scale_y'],1]
     ax, ay, az = np.deg2rad([state["tilt_x"], state["tilt_y"], state["rotation"]])
     rx = np.array(
         [[1, 0, 0], [0, math.cos(ax), -math.sin(ax)], [0, math.sin(ax), math.cos(ax)]]
@@ -378,7 +491,7 @@ def project(size, state):
         [[math.cos(az), -math.sin(az), 0], [math.sin(az), math.cos(az), 0], [0, 0, 1]]
     )
     pts = pts @ (rz @ ry @ rx).T
-    distance = 3 * max(w, h) * max(1, state["scale"])
+    distance = 3 * max(w, h) * max(1, state["scale"]) * max(1,state['scale_x'],state['scale_y'])
     xy = pts[:, :2] * distance / (distance + pts[:, 2:3])
     return xy + np.array([state["x"], state["y"]])
 
@@ -389,15 +502,17 @@ def composite(canvas, image, state, shadow=False):
         return
     # Exact integer translations need no projective resampling. This is common
     # for native UI child planes and preserves their original glyph pixels.
-    ix = state["x"] - image.width / 2
-    iy = state["y"] - image.height / 2
+    ix = state["x"] - image.width * state['pivot_x']
+    iy = state["y"] - image.height * state['pivot_y']
     if (
         state["scale"] == 1
+        and state['scale_x'] == 1 and state['scale_y'] == 1
         and state["rotation"] == 0
         and state["tilt_x"] == 0
         and state["tilt_y"] == 0
         and state["opacity"] == 1
         and state["blur"] == 0
+        and state['blur_length'] == 0
         and not shadow
         and ix == round(ix)
         and iy == round(iy)
@@ -405,7 +520,7 @@ def composite(canvas, image, state, shadow=False):
         canvas.alpha_composite(image, (int(ix), int(iy)))
         return
     points = project(image.size, state)
-    pad = math.ceil(state["blur"] * 3) + (50 if shadow else 2)
+    pad = math.ceil(state["blur"] * 3 + state['blur_length']/2) + (50 if shadow else 2)
     left = max(-pad, math.floor(points[:, 0].min()) - pad)
     top = max(-pad, math.floor(points[:, 1].min()) - pad)
     right = min(canvas.width + pad, math.ceil(points[:, 0].max()) + pad)
@@ -422,14 +537,14 @@ def composite(canvas, image, state, shadow=False):
         )
         values.extend([u, v])
     coeff = np.linalg.solve(np.array(matrix), np.array(values))
-    layer = image.transform(
+    layer = image.convert('RGBa').transform(
         (right - left, bottom - top),
         Image.Transform.PERSPECTIVE,
         coeff,
         Image.Resampling.BICUBIC,
-    )
-    if state["blur"]:
-        layer = layer.filter(ImageFilter.GaussianBlur(state["blur"]))
+    ).convert('RGBA')
+    if state["blur"] or state['blur_length']:
+        layer = filter_plane(layer,state['blur'],state['blur_length'],state['blur_angle'])
     if state["opacity"] < 1:
         layer.putalpha(
             layer.getchannel("A").point(lambda a: round(a * state["opacity"]))
@@ -453,6 +568,11 @@ class ProductFilm:
 
         def resolve_assets(nodes):
             for node in nodes:
+                if 'font' in node:
+                    path=(self.source_dir/node['font']).resolve()
+                    if not path.is_file(): raise GilvyError(f'font not found: {path}')
+                    node['font']=str(path)
+                    typeface(str(path),node.get('size',48),node.get('weight','Regular'))
                 if node["type"] == "image":
                     path = (self.source_dir / node["src"]).resolve()
                     if not path.is_file():
@@ -466,52 +586,84 @@ class ProductFilm:
         self.fps = spec.get("fps", 30)
         self.duration = spec["duration"]
         self.background = gradient(self.size, spec.get("background", {}))
+        self.dynamic_background=any(light.get('keyframes') for light in spec.get('background',{}).get('lights',[]))
         self.cache = {}
 
     def state(self, node, t):
-        return {
+        state = {
             k: interpolate(node.get("keyframes", {}).get(k), t, node.get(k, v))
             for k, v in DEFAULTS.items()
         }
+        for k in ('opacity','progress','clip_x','clip_y','clip_width','clip_height','pivot_x','pivot_y'):
+            state[k]=min(1,max(0,state[k]))
+        for k in ('scale','scale_x','scale_y'):state[k]=max(.01,state[k])
+        for k in ('blur','blur_length','clip_radius'):state[k]=max(0,state[k])
+        return state
 
     def paint(self, nodes, canvas, t):
         for node in nodes:
-            if not node.get("start", 0) <= t < node.get("end", self.duration):
-                continue
-            state = self.state(node, t)
-            if state["opacity"] <= 0:
-                continue
-            if node["type"] == "group":
-                image = Image.new("RGBA", (node["width"], node["height"]))
-                self.paint(node["children"], image, t)
+            count=node.get('samples',1)
+            shutter=node.get('shutter',.5)/self.fps
+            if count>1 and shutter>0:
+                images=[]
+                for offset in np.linspace(-shutter/2,shutter/2,count):
+                    plane=Image.new('RGBA',canvas.size)
+                    tt=min(max(t+float(offset),0),self.duration-1e-9)
+                    self.paint_one(node,plane,tt)
+                    images.append(plane)
+                canvas.alpha_composite(average_planes(images))
             else:
-                dynamic = (
-                    node["type"] == "inbox-part"
-                    and node.get("part") == "reply"
-                    or node["type"] in ("progress", "menu")
-                    or node.get("reveal", "none") != "none"
-                    or node.get("variant") == "workflow"
-                )
-                if not dynamic and node["id"] in self.cache:
-                    image = self.cache[node["id"]]
+                self.paint_one(node,canvas,t)
+
+    def paint_one(self, node, canvas, t):
+        if not node.get("start", 0) <= t < node.get("end", self.duration):
+            return
+        state = self.state(node, t)
+        if state["opacity"] <= 0:
+            return
+        if node["type"] == "group":
+            image = Image.new("RGBA", (node["width"], node["height"]))
+            self.paint(node["children"], image, t)
+        else:
+            dynamic = (
+                node["type"] == "inbox-part"
+                and node.get("part") == "reply"
+                or node["type"] in ("progress", "menu")
+                or node.get("reveal", "none") != "none"
+                or node.get("variant") == "workflow"
+                or node['type'] in ('counter','path')
+            )
+            if not dynamic and node["id"] in self.cache:
+                image = self.cache[node["id"]]
+            else:
+                if node['type']=='counter':
+                    image=text_plane(node,state['value'])
+                elif node['type'] in ('path','ellipse'):
+                    image=shape_plane(node,state['progress'])
+                elif node['type']=='text' and any(k in node for k in ('font','align','valign','baseline','padding','line_height','letter_spacing','overflow')):
+                    image=text_plane(node,progress=state['progress'])
                 else:
                     image = component(node, state["progress"])
-                    if not dynamic:
-                        self.cache[node["id"]] = image
-            composite(canvas, image, state, node.get("shadow", False))
+                if not dynamic:
+                    self.cache[node["id"]] = image
+        image=clip_plane(image,state)
+        composite(canvas, image, state, node.get("shadow", False))
+
+    def background_at(self,t):
+        return gradient(self.size,self.spec.get('background',{}),t) if self.dynamic_background else self.background.copy()
 
     def frame(self, t):
         """Temporal supersampling averages the complete composited frame in linear light."""
         samples = self.spec.get("samples", 1)
         shutter = self.spec.get("shutter", 0.5) / self.fps
         if samples == 1 or shutter == 0:
-            canvas = self.background.copy()
+            canvas = self.background_at(t)
             self.paint(self.spec["layers"], canvas, t)
             return canvas.convert("RGB")
         acc = np.zeros((self.size[1], self.size[0], 3), np.float32)
         for offset in np.linspace(-shutter / 2, shutter / 2, samples):
             tt = min(max(t + float(offset), 0), max(0, self.duration - 1e-9))
-            canvas = self.background.copy()
+            canvas = self.background_at(tt)
             self.paint(self.spec["layers"], canvas, tt)
             # sRGB transfer, rather than averaging gamma-encoded pixel values.
             a = np.asarray(canvas.convert("RGB"), dtype=np.float32) / 255

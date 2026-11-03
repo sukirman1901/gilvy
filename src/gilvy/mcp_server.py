@@ -28,6 +28,9 @@ mcp = FastMCP(
         "For explicitly requested SaaS/product motion, call product_motion_notes and use "
         "preview_product/render_product with style: product. House palette/caption/camera "
         "rules below apply only to the existing explainer path, not the opt-in product compositor. "
+        "Product UI presets are optional; compose primitive layers for custom visuals. "
+        "Follow the evidence/review contract in product_motion_notes; build and inspect a short "
+        "proof, record discrepancies, and distinguish measured facts from estimates. "
         "You direct a gilvy episode. You do not fill a scene-type form. "
         "Call directing_notes first and name an object, a physical verb, and what carries "
         "from the previous scene for every line. Pick a library type only when its verb "
@@ -129,6 +132,31 @@ def serve() -> None:
 def product_motion_notes() -> str:
     """Read the opt-in product compositor schema, capabilities, limits and reference-study method."""
     return Path(__file__).with_name("PRODUCT_MOTION.md").read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def import_product_tracks(spec_path: str, measurements_path: str,
+                          time_origin: float = 0, allow_estimated: bool = False,
+                          minimum_confidence: float = .8) -> str:
+    """Return a new product spec and provenance from reviewed measurements.
+
+    Read product_motion_notes for the report schema. Reject unresolved or
+    low-confidence samples; estimated values require explicit opt-in. This
+    imports declared measurements, not automatic tracking or recovered layers.
+    No input file is changed. Asset paths in the returned spec are resolved
+    against the original spec so saving it elsewhere preserves those assets.
+    """
+    from gilvy.product import load_product, ProductFilm
+    from gilvy.product_tracks import apply_measured_tracks
+    try:
+        film=load_product(spec_path)
+        report=json.loads(Path(measurements_path).read_text(encoding='utf-8'))
+        spec,provenance=apply_measured_tracks(film.spec,report,time_origin,
+            allow_estimated=allow_estimated,minimum_confidence=minimum_confidence)
+        result=ProductFilm(spec,film.source_dir)
+        return json.dumps({'ok':True,'spec':result.spec,'provenance':provenance})
+    except (GilvyError,OSError,ValueError) as exc:
+        return _fail(exc)
 
 
 @mcp.tool()

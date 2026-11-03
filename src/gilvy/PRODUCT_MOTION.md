@@ -7,6 +7,39 @@ coordinates and its own timeline. It does not run the explainer green-ratio QC.
 
 ## Direct, then build
 
+The engine is a drawing/animation tool. The AI is responsible for design and
+direction. Preset UI is optional; build a custom application surface from
+general primitives rather than adding a special engine component per client.
+
+### Evidence and review contract
+
+1. State whether the brief requests close reconstruction or transfer of visual
+   principles to a different product. Inspect actual moving reference clips;
+   never claim the title, transcript or contact sheet establishes its motion.
+2. Record observed, measured, inferred and unknown separately, with source
+   times. Inspect cut candidates; a word-to-bar cut is not automatically a
+   morph. Mark cropped, occluded or ambiguous measurements unresolved.
+3. Design delivery-size key frames before animation: grid, margins, hierarchy,
+   font metrics, palette and coherent product content. Do not add arbitrary
+   dashboards, badges, empty cards or fake statistics to make the image busy.
+4. Write choreography per object: initial pose, trigger, start/end, trajectory,
+   overlap, landing and consequence. Keep the primary focus clear. Effects
+   serve that action; no compulsory glow, 3D tilt, ambient movement or slide.
+5. Render a 3–5 second proof covering the difficult transformation. Inspect
+   native typography, clipping and spacing, then normal-speed timing. When
+   matching a reference, align source and candidate times and compare video
+   plus sampled overlays. Pixel scores and successful encode are not taste.
+6. Record the weakest beat and the revision or remaining discrepancy. Check
+   source state and continuity at boundaries. Extend only after revising a
+   failed proof; this is self-review, not a new user permission gate.
+7. Report what actually ran through Gilvy. A standalone experiment is evidence
+   for an engine change, not proof that the engine supports it. Do not invent
+   fidelity percentages or claim recovered fonts, layers, shutters or easing.
+
+Use `examples/product/study/build.py` for the scoped 30–35s measurement study
+and an unrelated metric-card exercise. Both render via ProductFilm; neither
+is an approved visual standard or automatic reconstruction.
+
 Read the supplied reference as a sequence of actions before choosing effects.
 Name the object, action, carry, meaning and consequence for each beat. Keep UI
 state changes legible: a menu opens before its destination enters; a learning
@@ -72,7 +105,10 @@ Film fields: `style`, `size`, `fps`, `duration`, `samples`, `shutter`,
 `background`, `layers`, `audio`. Size contains two even integers 160..1920.
 FPS is 1..60, duration >0 and <=120s. Background lights use normalized x/y and
 radius (.05..3); Gaussian color fields are smoothly interpolated from a low
-resolution image. The background is static in this version.
+resolution image. Lights optionally carry numeric `keyframes` for `x`, `y`,
+`radius`, `red`, `green`, `blue` (RGB channels 0..255), using the same global
+clock/easing syntax as layers. Base color and alpha remain static. A static
+background is cached; moving fields are evaluated at sample time.
 
 Layers are drawn in list order, back to front. Each requires a unique `id`,
 `type`, integer `width` and `height`. Defaults: center x/y = 0, scale 1, opacity
@@ -95,6 +131,9 @@ text deliberately larger than its plane will crop. Inspect at delivery size.
 | `group` | children | Compose child planes, then transform/clip the whole group |
 | `image` | src | Local raster asset, aspect-contained and centered in its plane with alpha preserved |
 | `inbox-part` | part, content | Native inbox surfaces: shell, sidebar, conversations, thread, customer, knowledge, reply |
+| `counter` | value, prefix, suffix, decimals, decimal_separator; text controls below | Independent numeric track, unrelated to progress/fill |
+| `ellipse` | fill, stroke, stroke_width | General ellipse in its local plane |
+| `path` | commands, fill, stroke, stroke_width | M/L/Q/C/Z contours; progress reveals cumulative stroke length |
 
 Detailed inbox panels accept `content` fields documented in the design review.
 They use the same measured layout as independently animated inbox parts. Use
@@ -121,21 +160,52 @@ within its plane. For fixed word positions or independent word travel, use a
 text layer per word inside a group. No automatic
 text morph, line wrapping or font identification is implied.
 
+For custom typography set `font` to a local TTF/OTF path relative to the spec.
+An explicit missing/unreadable font fails before encode; there is no silent
+substitution. Omit it to use bundled Poppins. Text/counter controls: `align`
+(left/center/right), `valign` (top/center/bottom), `padding` (pixels), `baseline`
+(first baseline in local pixels), `line_height` (font-size multiple),
+`letter_spacing` (pixels) and `overflow` (clip/error). Opting into these controls
+uses font metrics, retains full-string alignment during reveal, and never
+automatically shrinks/wraps the text. Legacy text specs retain their rendering.
+Counter `decimals` is 0..6; `decimal_separator` is `.` or `,`; prefix/suffix are
+literal strings. It formats the numeric `value` track without coupling to fill.
+
+Path commands are lists such as `[[M, 5, 40], [C, 30, 0, 70, 80, 115, 40]]`.
+Start contours with M; L/Q/C add lines/quadratic/cubic segments; Z closes.
+Curves are flattened to 32 segments. Closed contour fills appear in full;
+`progress` draws the cumulative stroke. This is not an SVG parser, boolean
+path engine or editable text-to-path converter. Fill holes are not supported.
+
 ## Timeline and transforms
 
 `keyframes` maps an animatable property to `[global_seconds, numeric_value,
 optional_easing]` entries. Times are unique/increasing and within the film.
 The easing on the **destination** entry controls that segment; default is
-`smooth` (smoothstep). Other choices: `linear`, `out_cubic`, `in_cubic`.
+`smooth` (smoothstep). Other choices: `linear`, `out_cubic`, `in_cubic`, or a
+four-number cubic Bezier `[x1,y1,x2,y2]` with x controls in 0..1. The x curve is
+inverted numerically; it is not an interpolation of the four control values.
 Before/after a track, its first/last value holds. Properties:
 
 - x/y (center in pixels), scale (.01..8), rotation (degrees).
 - tilt_x/tilt_y (-65..65 degrees): projected 2.5D plane, not a 3D mesh.
 - opacity (0..1), blur (0..40 pixels), progress (0..1).
+- value (-1e15..1e15), independent counter value.
+- clip_x/clip_y/clip_width/clip_height (0..1 of local plane), clip_radius (pixels).
+- pivot_x/pivot_y (0..1): the local pivot placed at x/y; defaults .5/.5.
+- scale_x/scale_y (.01..8) multiply scale along the local axes.
+- blur_length (0..128 parent-plane pixels), blur_angle (degrees, 0 horizontal).
+
+Clipping is applied before projection to any layer or group. It changes visible
+area, not the dimensions or font size of children. Bezier overshoot is allowed
+for numeric tracks; normalized states are clamped to 0..1 and scale/blur to
+their positive domain at evaluation. Keep your authored curve within the
+intended resource range. Directional blur is a sampled spatial kernel, not an
+automatic velocity estimator; filtering and resampling use premultiplied alpha.
 
 Children use coordinates relative to their group's untransformed plane and
 share the global clock. Each group clips at its own bounds, then projects as
-one image. All rotations use the center of the plane. Projection uses a fixed
+one image. Rotations use the configurable local pivot. Projection uses a fixed
 camera distance of three times the larger unscaled plane dimension, adjusted
 for scale. No auto camera tracking or scene graph z-sorting is performed.
 
@@ -144,6 +214,31 @@ the complete composite, averaged with the sRGB transfer function in linear
 light. It is real sampled motion blur, but increases CPU cost and can mix
 states around hard cuts. Use one sample or zero shutter for crisp diagnostics.
 Layer Gaussian blur is a separate artistic control, not a motion estimator.
+
+Each layer/group can also set `samples` (1..8) and `shutter` (0..1 frame).
+Only that object/subtree is sampled into transparent planes, averaged in
+premultiplied linear light and composited at its existing stack position.
+Do not double-sample the same movement through both parent and child/global
+sampling unless intentional; nested layer samples are limited to eight per
+branch. Per-layer sampling costs full canvas planes and may straddle cuts.
+
+### Import reviewed measurements
+
+`gilvy.product_tracks.apply_measured_tracks(spec, report, time_origin=30)`
+returns a new spec and provenance without mutating inputs. Report structure:
+`{source: "study name", tracks: [{layer: "bar", property: "x", samples:
+[{time: 30, value: 100, status: measured, confidence: 0.95}, ...]}]}`.
+Statuses measured/reviewed are accepted; estimated requires explicit
+`allow_estimated=True`. Rejected/unknown/null or confidence below .8 fail.
+Confidence is the reviewer's declaration, not a certified model score. Times
+must be unique, increasing, and land within film duration after subtraction.
+Import creates linear tracks and validates the complete result. Preserve the
+returned provenance beside the film. It does not run tracking/OCR or clean
+ambiguous detections; those remain explicit analysis work.
+MCP `import_product_tracks(spec_path, measurements_path, time_origin=0,
+allow_estimated=False, minimum_confidence=.8)` returns the imported spec and
+provenance without writing files. Returned asset paths are absolute, resolved
+from the original spec; save the returned spec explicitly before rendering.
 
 Resource guards: at most 100 planes, nesting up to six group levels, 32 million
 total local-plane pixels. The compositor uses Pillow/NumPy on CPU. Render a
@@ -166,5 +261,5 @@ readability, continuity and consequences before a full render.
 
 This first product compositor does not import Figma, SVG, HTML, video textures,
 or editable layers from a reference; it has no GPU, 3D mesh, automatic asset
-extraction, arbitrary Bezier easing or physically simulated depth of field.
+extraction, automatic object tracking or physically simulated depth of field.
 Describe those as future capabilities rather than implying they are present.
