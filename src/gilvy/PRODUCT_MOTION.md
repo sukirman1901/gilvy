@@ -66,7 +66,13 @@ gilvy render-product examples/product/learning.yaml --out out/product.mp4
 
 MCP: `product_motion_notes`, `preview_product(spec_path, output_dir, times)`,
 `render_product(spec_path, output, start=0, duration=None)`. The motion window
-keeps global time, including group children; it does not replay entrances.
+keeps the absolute film clock, including locally timed children; it does not replay entrances.
+Use `inspect_product_frame(spec_path, frame, output)` for a native indexed PNG,
+compiled layer timing/state and measured text. `gilvy serve-product film.yaml`
+opens a local silent frame-seeking viewer; it is not a real-time/audio player.
+MCP `start_product_render`, `product_render_status`, `cancel_product_render`
+provide process-local observable jobs. Read [composition runtime](../../docs/composition-runtime.md)
+for clocks, flow layout, particles, caching and job lifecycle limits.
 Preview directories must be new. Video files are published atomically only
 after encoding and integrity validation; an existing output is replaced only
 by a validated result. Sidecars use `.product.json`.
@@ -134,6 +140,7 @@ text deliberately larger than its plane will crop. Inspect at delivery size.
 | `counter` | value, prefix, suffix, decimals, decimal_separator; text controls below | Independent numeric track, unrelated to progress/fill |
 | `ellipse` | fill, stroke, stroke_width | General ellipse in its local plane |
 | `path` | commands, fill, stroke, stroke_width | M/L/Q/C/Z contours; progress reveals cumulative stroke length |
+| `particles` | points, poses, dot_radius, color | Persistent indexed dots; equal-count pose interpolation |
 
 Detailed inbox panels accept `content` fields documented in the design review.
 They use the same measured layout as independently animated inbox parts. Use
@@ -158,16 +165,21 @@ Bundled weights: Light, Regular, Medium, SemiBold. Word reveal adds complete
 words; character reveal adds characters. The currently visible text is centered
 within its plane. For fixed word positions or independent word travel, use a
 text layer per word inside a group. No automatic
-text morph, line wrapping or font identification is implied.
+text morph or font identification is implied. Explicit `overflow: wrap` is
+available for metric-based text; legacy text does not wrap automatically.
 
 For custom typography set `font` to a local TTF/OTF path relative to the spec.
 An explicit missing/unreadable font fails before encode; there is no silent
 substitution. Omit it to use bundled Poppins. Text/counter controls: `align`
 (left/center/right), `valign` (top/center/bottom), `padding` (pixels), `baseline`
 (first baseline in local pixels), `line_height` (font-size multiple),
-`letter_spacing` (pixels) and `overflow` (clip/error). Opting into these controls
+`letter_spacing` (pixels) and `overflow` (clip/error/wrap/fit), `max_lines`
+(1..100), `min_size` (1..size). Opting into these controls
 uses font metrics, retains full-string alignment during reveal, and never
-automatically shrinks/wraps the text. Legacy text specs retain their rendering.
+automatically shrinks/wraps unless the explicit fit/wrap policy is selected.
+Fit preserves authored line breaks and requires the chosen minimum size; wrap
+breaks at words and fails on overfull unbreakable content. Legacy text specs
+retain their rendering.
 Counter `decimals` is 0..6; `decimal_separator` is `.` or `,`; prefix/suffix are
 literal strings. It formats the numeric `value` track without coupling to fill.
 
@@ -180,7 +192,11 @@ path engine or editable text-to-path converter. Fill holes are not supported.
 ## Timeline and transforms
 
 `keyframes` maps an animatable property to `[global_seconds, numeric_value,
-optional_easing]` entries. Times are unique/increasing and within the film.
+optional_easing]` entries by default. Times are unique/increasing and within the film.
+Opt into `time_space: local` to make start/end parent-relative and keyframes
+relative to this layer's own start. A local track must fit its layer duration.
+Global remains the default, including for children of local groups. Parent
+visibility always clips descendants. See the composition runtime for examples.
 The easing on the **destination** entry controls that segment; default is
 `smooth` (smoothstep). Other choices: `linear`, `out_cubic`, `in_cubic`, or a
 four-number cubic Bezier `[x1,y1,x2,y2]` with x controls in 0..1. The x curve is
@@ -204,7 +220,7 @@ intended resource range. Directional blur is a sampled spatial kernel, not an
 automatic velocity estimator; filtering and resampling use premultiplied alpha.
 
 Children use coordinates relative to their group's untransformed plane and
-share the global clock. Each group clips at its own bounds, then projects as
+retain the global clock by default; local timing is explicit. Each group clips at its own bounds, then projects as
 one image. Rotations use the configurable local pivot. Projection uses a fixed
 camera distance of three times the larger unscaled plane dimension, adjusted
 for scale. No auto camera tracking or scene graph z-sorting is performed.
@@ -231,7 +247,8 @@ returns a new spec and provenance without mutating inputs. Report structure:
 Statuses measured/reviewed are accepted; estimated requires explicit
 `allow_estimated=True`. Rejected/unknown/null or confidence below .8 fail.
 Confidence is the reviewer's declaration, not a certified model score. Times
-must be unique, increasing, and land within film duration after subtraction.
+must be unique, increasing, and land within the destination clock after
+subtraction of source origin plus any local track origin.
 Import creates linear tracks and validates the complete result. Preserve the
 returned provenance beside the film. It does not run tracking/OCR or clean
 ambiguous detections; those remain explicit analysis work.
@@ -263,3 +280,12 @@ This first product compositor does not import Figma, SVG, HTML, video textures,
 or editable layers from a reference; it has no GPU, 3D mesh, automatic asset
 extraction, automatic object tracking or physically simulated depth of field.
 Describe those as future capabilities rather than implying they are present.
+
+## Composition tools
+
+Read [composition-runtime.md](../../docs/composition-runtime.md) for compiled
+frame coverage, local/global timing, root particles, measured row/column groups,
+strict text fit/wrap, the local frame viewer and MCP render job lifecycle.
+Try `examples/product/composition.yaml` as a six-second technical diagnostic.
+These are independently implemented Python capabilities, without a Remotion
+dependency. They do not automatically design coherent UI or certify creativity.

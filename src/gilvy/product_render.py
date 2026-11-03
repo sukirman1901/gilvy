@@ -8,12 +8,14 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 from gilvy.errors import GilvyError
 from gilvy.product import finite, load_product
+from gilvy.render_jobs import RenderControl
 
 
 def preview_product(spec_path, output_dir, times=None):
@@ -52,7 +54,9 @@ def preview_product(spec_path, output_dir, times=None):
     return {"frames": rows, "sheet": str(path), "creative_review": "required"}
 
 
-def render_product(spec_path, output, start=0.0, duration=None):
+def render_product(spec_path, output, start=0.0, duration=None, *, control=None):
+    control = control or RenderControl()
+    control.update("preparing")
     film = load_product(spec_path)
     if not finite(start) or not 0 <= start < film.duration:
         raise GilvyError("invalid product start time")
@@ -76,6 +80,7 @@ def render_product(spec_path, output, start=0.0, duration=None):
     dest.parent.mkdir(parents=True, exist_ok=True)
     frames = max(1, math.ceil(duration * film.fps - 1e-8))
     actual = frames / film.fps
+    control.update("rendering", total_frames=frames)
     with tempfile.TemporaryDirectory(prefix=".product-", dir=dest.parent) as temp:
         temp = Path(temp)
         video = temp / "video.mp4"
@@ -134,10 +139,22 @@ def render_product(spec_path, output, start=0.0, duration=None):
             proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=log)
             try:
                 for n in range(frames):
+                    control.check()
+                    begin = time.monotonic()
                     t = min(start + n / film.fps, film.duration - 1e-9)
                     proc.stdin.write(film.frame(t).tobytes())
+                    control.frame_done(n, time.monotonic()-begin)
+                    control.update("rendering", rendered_frames=n+1)
                 proc.stdin.close()
-                code = proc.wait(timeout=120)
+                control.update("encoding")
+                deadline = time.monotonic()+120
+                while True:
+                    control.check()
+                    try:
+                        code = proc.wait(timeout=.1)
+                        break
+                    except subprocess.TimeoutExpired:
+                        if time.monotonic() >= deadline: raise
             except (OSError, subprocess.TimeoutExpired) as exc:
                 proc.kill()
                 proc.wait()
@@ -148,6 +165,7 @@ def render_product(spec_path, output, start=0.0, duration=None):
                     proc.wait()
         if code:
             raise GilvyError(f"product encode failed: {log_path.read_text()[-2000:]}")
+        control.update("verifying")
         # Decode/count the finished artifact before publishing an atomic result.
         try:
             probe = subprocess.run(
@@ -189,7 +207,7 @@ def render_product(spec_path, output, start=0.0, duration=None):
             raise GilvyError(
                 "product output failed frame/dimension/duration/audio integrity checks"
             )
-        os.replace(video, dest)
+        control.publish(lambda: os.replace(video, dest))
     result = {
         "video": str(dest),
         "style": "product",
@@ -204,5 +222,10 @@ def render_product(spec_path, output, start=0.0, duration=None):
         "qc": {"ok": True, "scope": "technical_integrity"},
         "creative_review": "required",
     }
-    dest.with_suffix(".product.json").write_text(json.dumps(result, indent=2) + "\n")
+    try:
+        dest.with_suffix(".product.json").write_text(json.dumps(result, indent=2) + "\n")
+    except OSError as exc:
+        # The validated video is already committed; a metadata failure must not
+        # report that the video render failed or could still be cancelled.
+        result["metadata_warning"] = str(exc)
     return result

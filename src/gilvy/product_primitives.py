@@ -28,46 +28,87 @@ def counter_text(node, value):
     return node.get('prefix', '') + result + node.get('suffix', '')
 
 
-def text_plane(node, value=None, progress=1):
+def text_layout(node, full):
+    """Measure full content with final font, including actual glyph ink bounds."""
     w, h = node['width'], node['height']
-    im = Image.new('RGBA', (w, h)); draw = ImageDraw.Draw(im)
-    full = counter_text(node, value) if value is not None else node.get('text', '')
-    visible = full
-    if node.get('reveal') == 'characters':
-        visible = full[:int(len(full) * progress + 1e-8)]
-    elif node.get('reveal') == 'words':
-        tokens=list(re.finditer(r'\S+',full));count=int(len(tokens)*progress+1e-8)
-        visible=full[:tokens[count-1].end()] if count else ''
-    size = node.get('size', 48)
-    face = typeface(node.get('font'), size, node.get('weight', 'Regular'))
-    spacing = node.get('letter_spacing', 0)
-    def length(s):
-        return face.getlength(s) + max(0, len(s)-1) * spacing
-    lines = full.split('\n'); shown = visible.split('\n')
-    ascent, descent = face.getmetrics()
-    step = size * node.get('line_height', 1.3)
-    block_h = ascent + descent + step * (len(lines)-1)
-    pad = node.get('padding', 0)
-    valign = node.get('valign', 'center')
-    top = {'top': pad, 'center': (h-block_h)/2, 'bottom': h-pad-block_h}[valign]
-    first = node.get('baseline', top+ascent)
-    align = node.get('align', 'center')
-    for i, line in enumerate(lines):
-        width = length(line)
-        x = {'left': pad, 'center': (w-width)/2, 'right': w-pad-width}[align]
-        y = first + i*step
-        if node.get('overflow', 'clip') == 'error' and line:
-            b = draw.textbbox((x, y), line, font=face, anchor='ls')
-            if x < 0 or x+width > w or b[1] < 0 or b[3] > h:
-                raise GilvyError(f"text overflows layer {node.get('id', '')}")
-        part = shown[i] if i < len(shown) else ''
+    size = round(node.get('size', 48))
+    pad, spacing = node.get('padding', 0), node.get('letter_spacing', 0)
+    policy = node.get('overflow', 'clip')
+    def calculate(size):
+        face = typeface(node.get('font'), size, node.get('weight', 'Regular'))
+        def length(line):
+            return face.getlength(line)+max(0,len(line)-1)*spacing
+        lines = full.split('\n')
+        if policy == 'wrap':
+            lines = []
+            for paragraph in full.split('\n'):
+                line = ''
+                for word in paragraph.split():
+                    candidate = line+' '+word if line else word
+                    if line and length(candidate)>w-2*pad:
+                        lines.append(line); line=word
+                    else: line=candidate
+                lines.append(line)
+        ascent, descent = face.getmetrics()
+        step = size*node.get('line_height',1.3)
+        block_h = ascent+descent+step*(len(lines)-1)
+        top = {'top':pad,'center':(h-block_h)/2,'bottom':h-pad-block_h}[node.get('valign','center')]
+        first = node.get('baseline',top+ascent)
+        rows=[];fits=len(lines)<=node.get('max_lines',100)
+        for i,line in enumerate(lines):
+            width=length(line)
+            x={'left':pad,'center':(w-width)/2,'right':w-pad-width}[node.get('align','center')]
+            y=first+i*step
+            if spacing and line:
+                boxes=[]
+                for j,ch in enumerate(line):
+                    advance=face.getlength(line[:j+1])-face.getlength(ch)+j*spacing
+                    box=face.getbbox(ch,anchor='ls')
+                    boxes.append((x+advance+box[0],y+box[1],x+advance+box[2],y+box[3]))
+                ink=[min(b[0] for b in boxes),min(b[1] for b in boxes),max(b[2] for b in boxes),max(b[3] for b in boxes)]
+            else:
+                box=face.getbbox(line,anchor='ls')
+                ink=[x+box[0],y+box[1],x+box[2],y+box[3]]
+            if line and (x<pad or x+width>w-pad or ink[0]<pad or ink[2]>w-pad or ink[1]<pad or ink[3]>h-pad):
+                fits=False
+            rows.append({'text':line,'x':x,'baseline':y,'width':width,'ink':ink})
+        return face,rows,fits
+    face,rows,fits=calculate(size)
+    if policy=='fit' and not fits:
+        # Fit is explicitly requested. Never change legacy/clip text sizing.
+        low=max(1,math.ceil(node.get('min_size',1))); high=size-1; best=None
+        while low<=high:
+            mid=(low+high)//2
+            trial=calculate(mid)
+            if trial[2]:best=(mid,trial);low=mid+1
+            else:high=mid-1
+        if best is not None:size,(face,rows,fits)=best
+    if policy!='clip' and not fits:
+        raise GilvyError(f"text overflows layer {node.get('id','')}: {policy} cannot satisfy bounds/max_lines/min_size")
+    return face, {'size':size,'lines':rows,'fits':fits,'overflow':policy}
+
+
+def text_plane(node, value=None, progress=1):
+    full=counter_text(node,value) if value is not None else node.get('text','')
+    face,layout=text_layout(node,full)
+    im=Image.new('RGBA',(node['width'],node['height']));draw=ImageDraw.Draw(im)
+    # Reveal uses final line layout, retaining spacing as content appears.
+    joined='\n'.join(row['text'] for row in layout['lines'])
+    limit=len(joined)
+    if node.get('reveal')=='characters':limit=int(limit*progress+1e-8)
+    elif node.get('reveal')=='words':
+        words=list(re.finditer(r'\S+',joined));count=int(len(words)*progress+1e-8)
+        limit=words[count-1].end() if count else 0
+    offset=0;spacing=node.get('letter_spacing',0)
+    for row in layout['lines']:
+        part=row['text'][:max(0,limit-offset)];offset+=len(row['text'])+1
+        x,y=row['x'],row['baseline']
         if not spacing:
-            draw.text((x, y), part, font=face, fill=node.get('color', '#101e2f'), anchor='ls')
+            draw.text((x,y),part,font=face,fill=node.get('color','#101e2f'),anchor='ls')
         else:
-            for j, ch in enumerate(part):
-                # Prefix advances retain the font's kerning while adding tracking.
-                advance = face.getlength(part[:j+1])-face.getlength(ch) + j*spacing
-                draw.text((x+advance, y), ch, font=face, fill=node.get('color', '#101e2f'), anchor='ls')
+            for j,ch in enumerate(part):
+                advance=face.getlength(part[:j+1])-face.getlength(ch)+j*spacing
+                draw.text((x+advance,y),ch,font=face,fill=node.get('color','#101e2f'),anchor='ls')
     return im
 
 

@@ -11,11 +11,14 @@ import numpy as np
 import yaml
 from PIL import Image, ImageFilter
 
+from gilvy.timeline import timing, compile_timeline, frame_count
+from gilvy.particles import checked_points, particle_plane
+from gilvy.product_layout import layout_groups
 from gilvy.errors import GilvyError
 from gilvy.product_ui import color, component
 from gilvy.product_design import PARTS, DEFAULT_CONTENT
 from gilvy.product_primitives import (
-    text_plane, shape_plane, clip_plane, filter_plane, average_planes, typeface,
+    text_plane, text_layout, counter_text, shape_plane, clip_plane, filter_plane, average_planes, typeface,
 )
 
 
@@ -61,6 +64,7 @@ KINDS = {
     "counter",
     "ellipse",
     "path",
+    "particles",
 }
 PROPS = {
     "id",
@@ -98,6 +102,8 @@ PROPS = {
     "font", "align", "valign", "baseline", "padding", "line_height",
     "letter_spacing", "overflow", "decimals", "decimal_separator", "prefix", "suffix",
     "commands", "stroke", "stroke_width", "samples", "shutter",
+    "time_space", "layout", "points", "poses", "dot_radius",
+    "max_lines", "min_size",
     *DEFAULTS,
 }
 
@@ -214,7 +220,7 @@ def validate(spec):
     ids = set()
     pixels = 0
 
-    def walk(nodes, depth=0, sample_budget=1):
+    def walk(nodes, depth=0, sample_budget=1, parent_start=0, parent_end=duration):
         nonlocal pixels
         if depth > 6:
             raise GilvyError("group nesting exceeds six levels")
@@ -279,9 +285,25 @@ def validate(spec):
                 or not 0 <= node.get("radius", 16) <= 2048
             ):
                 raise GilvyError("invalid corner radius")
-            a, b = node.get("start", 0), node.get("end", duration)
-            if not finite(a) or not finite(b) or not 0 <= a < b <= duration:
-                raise GilvyError(f"layer {identifier}: invalid start/end")
+            a, b, origin = timing(node, duration, parent_start, parent_end)
+            track_limit = b-a if node.get("time_space") == "local" else duration
+            if "layout" in node and node["type"] != "group":
+                raise GilvyError("layout is only supported on groups")
+            if node["type"] == "particles":
+                points = checked_points(node.get("points"))
+                poses = node.get("poses", [])
+                if not isinstance(poses, list) or len(poses) > 64:
+                    raise GilvyError("particles support at most 64 poses")
+                previous = 0
+                for pose in poses:
+                    if (not isinstance(pose, list) or len(pose) not in (2, 3)
+                        or not finite(pose[0]) or not previous < pose[0] <= track_limit
+                        or len(pose) == 3 and not valid_ease(pose[2])):
+                        raise GilvyError("particle pose times must increase from >0 within the track clock")
+                    checked_points(pose[1], len(points))
+                    previous = pose[0]
+                if not finite(node.get("dot_radius", 2)) or not .25 <= node.get("dot_radius", 2) <= 128:
+                    raise GilvyError("dot_radius must be .25..128")
             for prop in DEFAULTS:
                 if prop in node and not _range(prop, node[prop]):
                     raise GilvyError(f"invalid {prop}")
@@ -297,11 +319,11 @@ def validate(spec):
                         not isinstance(key, list)
                         or len(key) not in (2, 3)
                         or not finite(key[0])
-                        or not 0 <= key[0] <= duration
+                        or not 0 <= key[0] <= track_limit
                         or key[0] <= previous
                     ):
                         raise GilvyError(
-                            "keyframe times must be finite, unique, increasing global seconds"
+                            "keyframe times must be finite, unique, increasing seconds within their time space"
                         )
                     if (
                         not _range(prop, key[1])
@@ -356,9 +378,10 @@ def validate(spec):
             if node["type"] == "group":
                 if not isinstance(node.get("children"), list):
                     raise GilvyError("group requires children")
-                walk(node["children"], depth + 1, branch_samples)
+                walk(node["children"], depth + 1, branch_samples, a, b)
 
     walk(spec["layers"])
+    layout_groups(copy.deepcopy(spec["layers"]))
     bg = spec.get("background", {})
     if not isinstance(bg, dict) or set(bg) - {"base", "lights"}:
         raise GilvyError("invalid background")
@@ -397,13 +420,17 @@ def validate(spec):
 
 
 def validate_tools(node):
+    if type(node.get("max_lines", 100)) is not int or not 1 <= node.get("max_lines", 100) <= 100:
+        raise GilvyError("max_lines must be 1..100")
+    if not finite(node.get("size", 48)) or not finite(node.get("min_size", 1)) or not 1 <= node.get("min_size", 1) <= node.get("size", 48):
+        raise GilvyError("min_size must be positive and <= size")
     for prop in ('font','prefix','suffix'):
         if prop in node and (not isinstance(node[prop],str) or len(node[prop])>4096):
             raise GilvyError(f'{prop} must be text')
     if 'font' in node and (not node['font'] or '://' in node['font']):
         raise GilvyError('font must be a local filename')
     for prop, choices in [('align',('left','center','right')),('valign',('top','center','bottom')),
-                          ('overflow',('clip','error')),('decimal_separator',('.',','))]:
+                          ('overflow',('clip','error','wrap','fit')),('decimal_separator',('.',','))]:
         if prop in node and node[prop] not in choices: raise GilvyError(f'invalid {prop}')
     for prop,lo,hi in [('padding',0,2048),('baseline',-4096,8192),('line_height',.5,5),
                       ('letter_spacing',-20,100),('stroke_width',.1,512)]:
@@ -565,6 +592,7 @@ class ProductFilm:
         validate(spec)
         self.spec = copy.deepcopy(spec)
         self.source_dir = Path(source_dir)
+        self.timeline = compile_timeline(self.spec)
 
         def resolve_assets(nodes):
             for node in nodes:
@@ -582,14 +610,27 @@ class ProductFilm:
                     resolve_assets(node["children"])
 
         resolve_assets(self.spec["layers"])
+        self.layers = copy.deepcopy(self.spec["layers"])
+        layout_groups(self.layers)
         self.size = tuple(spec.get("size", [1280, 720]))
         self.fps = spec.get("fps", 30)
         self.duration = spec["duration"]
         self.background = gradient(self.size, spec.get("background", {}))
         self.dynamic_background=any(light.get('keyframes') for light in spec.get('background',{}).get('lights',[]))
         self.cache = {}
+        # Decode static assets and validate full text before any encoder starts.
+        def prepare(nodes):
+            for node in nodes:
+                if node["type"] == "group":
+                    prepare(node["children"])
+                elif node["type"] == "image":
+                    self.cache[node["id"]] = component(node, 1)
+                elif node["type"] == "text" and any(k in node for k in ("font", "align", "valign", "baseline", "padding", "line_height", "letter_spacing", "overflow")):
+                    text_plane(node)
+        prepare(self.layers)
 
     def state(self, node, t):
+        t -= self.timeline[node["id"]].origin
         state = {
             k: interpolate(node.get("keyframes", {}).get(k), t, node.get(k, v))
             for k, v in DEFAULTS.items()
@@ -616,7 +657,7 @@ class ProductFilm:
                 self.paint_one(node,canvas,t)
 
     def paint_one(self, node, canvas, t):
-        if not node.get("start", 0) <= t < node.get("end", self.duration):
+        if not self.timeline[node["id"]].active(t):
             return
         state = self.state(node, t)
         if state["opacity"] <= 0:
@@ -631,12 +672,14 @@ class ProductFilm:
                 or node["type"] in ("progress", "menu")
                 or node.get("reveal", "none") != "none"
                 or node.get("variant") == "workflow"
-                or node['type'] in ('counter','path')
+                or node['type'] in ('counter','path','particles')
             )
             if not dynamic and node["id"] in self.cache:
                 image = self.cache[node["id"]]
             else:
-                if node['type']=='counter':
+                if node['type']=='particles':
+                    image=particle_plane(node,t-self.timeline[node['id']].origin,ease)
+                elif node['type']=='counter':
                     image=text_plane(node,state['value'])
                 elif node['type'] in ('path','ellipse'):
                     image=shape_plane(node,state['progress'])
@@ -649,6 +692,32 @@ class ProductFilm:
         image=clip_plane(image,state)
         composite(canvas, image, state, node.get("shadow", False))
 
+    def frame_at(self, index):
+        """Exact integer seek through the same native kernel used for export."""
+        if type(index) is not int or not 0 <= index < frame_count(self.duration, self.fps):
+            raise GilvyError("frame index outside composition")
+        return self.frame(index / self.fps)
+
+    def inspect(self, index):
+        if type(index) is not int or not 0 <= index < frame_count(self.duration, self.fps):
+            raise GilvyError("frame index outside composition")
+        t = index / self.fps
+        def walk(nodes):
+            rows = []
+            for node in nodes:
+                span = self.timeline[node["id"]]
+                state = self.state(node, t)
+                rows.append({"id": node["id"], "type": node["type"], "parent": span.parent,
+                             "active": span.active(t), "time_space": node.get("time_space", "global"),
+                             "track_seconds": t-span.origin,
+                             "state": state, "quad_in_parent": project((node["width"],node["height"]),state).tolist()})
+                if node["type"] in ("text", "counter") and (node["type"] == "counter" or any(k in node for k in ("font", "align", "valign", "baseline", "padding", "line_height", "letter_spacing", "overflow"))):
+                    full = counter_text(node, state["value"]) if node["type"] == "counter" else node.get("text", "")
+                    rows[-1]["text_layout"] = text_layout(node, full)[1]
+                if node["type"] == "group": rows.extend(walk(node["children"]))
+            return rows
+        return {"frame": index, "time": t, "layers": walk(self.layers)}
+
     def background_at(self,t):
         return gradient(self.size,self.spec.get('background',{}),t) if self.dynamic_background else self.background.copy()
 
@@ -658,13 +727,13 @@ class ProductFilm:
         shutter = self.spec.get("shutter", 0.5) / self.fps
         if samples == 1 or shutter == 0:
             canvas = self.background_at(t)
-            self.paint(self.spec["layers"], canvas, t)
+            self.paint(self.layers, canvas, t)
             return canvas.convert("RGB")
         acc = np.zeros((self.size[1], self.size[0], 3), np.float32)
         for offset in np.linspace(-shutter / 2, shutter / 2, samples):
             tt = min(max(t + float(offset), 0), max(0, self.duration - 1e-9))
             canvas = self.background_at(tt)
-            self.paint(self.spec["layers"], canvas, tt)
+            self.paint(self.layers, canvas, tt)
             # sRGB transfer, rather than averaging gamma-encoded pixel values.
             a = np.asarray(canvas.convert("RGB"), dtype=np.float32) / 255
             acc += (
