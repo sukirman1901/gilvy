@@ -18,6 +18,21 @@ pip install -e ".[dev]"
 
 Poppins (SIL Open Font License) ships in `src/gilvy/fonts` with its `OFL.txt`. The rest of the project is MIT.
 
+To fetch reference videos from supported sites or direct HTTP(S) media links,
+install the optional extra in the same environment as Gilvy/MCP:
+
+```bash
+pip install -e '.[download]'
+gilvy download-reference 'https://www.youtube.com/watch?v=awUYikrGsKk' --out out/reference-download
+```
+
+Use the returned `video` path with `gilvy analyze-reference` or MCP
+`analyze_reference`. MCP acquisition is `download_reference`. This is not
+YouTube-only or a universal web downloader: unsupported/auth-blocked pages can
+fail. See [reference acquisition and analysis](docs/reference-analysis.md) for
+limits, output provenance and the local-file fallback. Default installs and
+the default Docker image do not include the optional downloader.
+
 ## Make a video
 
 ```bash

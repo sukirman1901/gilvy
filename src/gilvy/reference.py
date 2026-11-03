@@ -73,7 +73,7 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
     if not isinstance(width, int) or isinstance(width, bool) or not 160 <= width <= 1280 or width % 2:
         raise GilvyError("width must be an even integer from 160 to 1280")
     if str(video_path).startswith(("http:", "https:")):
-        raise GilvyError("use a local video file; downloading URLs is not part of analyze-reference")
+        raise GilvyError("use a local video file; run download-reference first and pass its returned video path")
     source = Path(video_path).expanduser().resolve()
     dest = Path(output_dir).expanduser().resolve()
     if not source.is_file():
