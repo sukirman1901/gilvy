@@ -192,3 +192,22 @@ Urutannya: tulis voice-over dulu, pilih jenis adegan, `gilvy preview`, `gilvy re
 gilvy render examples/ep01-mie-ayam.yaml
 gilvy qc out/ep01-mie-ayam.mp4
 ```
+
+## Composition and native frame inspection
+
+Product compositions now support opt-in local timelines, persistent indexed
+particles, measured row/column groups and explicit text wrap/fit. Existing
+product films keep their global timing and legacy typography. The house show
+keeps its established rendering and style.
+
+```bash
+gilvy serve-product examples/product/composition.yaml --port 8765
+gilvy inspect-product examples/product/composition.yaml --frame 90 --out out/frame-90.png
+gilvy render-product examples/product/composition.yaml --out out/composition.mp4
+```
+
+The local viewer seeks exact frames with the same native renderer as export;
+it is silent and does not promise real-time playback. MCP adds
+`inspect_product_frame`, `start_product_render`, `product_render_status` and
+`cancel_product_render`. Jobs are process-local, not a persistent queue.
+Read [the composition contract and limits](docs/composition-runtime.md).

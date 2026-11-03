@@ -134,7 +134,8 @@ def serve() -> None:
 @mcp.tool()
 def product_motion_notes() -> str:
     """Read the opt-in product compositor schema, capabilities, limits and reference-study method."""
-    return Path(__file__).with_name("PRODUCT_MOTION.md").read_text(encoding="utf-8")
+    from gilvy.product import product_notes
+    return product_notes()
 
 
 @mcp.tool()
@@ -186,6 +187,55 @@ def preview_product(spec_path: str, output_dir: str, times: list[float] | None =
     """
     try:
         return json.dumps({"ok":True,**_preview_product(spec_path,output_dir,times)})
+    except GilvyError as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def inspect_product_frame(spec_path: str, frame: int, output: str) -> str:
+    """Save one native PNG and return layer clocks, states and measured typography.
+
+    Frame is an absolute zero-based integer. Output must be a new PNG path.
+    Parent-plane quads are not world-space bounds or creative-quality scores.
+    """
+    from gilvy.product_preview import inspect_product_frame as inspect
+    try:
+        return json.dumps({"ok": True, **inspect(spec_path, frame, output)})
+    except (GilvyError, OSError, ValueError) as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def start_product_render(spec_path: str, output: str, start: float = 0,
+                         duration: float | None = None) -> str:
+    """Queue a product render and return immediately. Poll product_render_status.
+
+    Jobs and cancellation exist only while this MCP process is alive. At most
+    eight queued/running jobs, one worker. Inputs are read when the job starts.
+    """
+    from gilvy.render_jobs import jobs
+    try:
+        return json.dumps({"ok": True, **jobs.start(spec_path, output, start, duration)})
+    except (GilvyError, OSError, ValueError) as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def product_render_status(job_id: str) -> str:
+    """Read stage, frame progress, slowest frame, error or completed output."""
+    from gilvy.render_jobs import jobs
+    try:
+        return json.dumps({"ok": True, **jobs.get(job_id)})
+    except GilvyError as exc:
+        return _fail(exc)
+
+
+@mcp.tool()
+def cancel_product_render(job_id: str) -> str:
+    """Request cancellation before publication. A published result is not rolled back."""
+    from gilvy.render_jobs import jobs
+    try:
+        return json.dumps({"ok": True, **jobs.cancel(job_id)})
     except GilvyError as exc:
         return _fail(exc)
 

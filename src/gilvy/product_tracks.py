@@ -7,6 +7,7 @@ import copy
 
 from gilvy.errors import GilvyError
 from gilvy.product import DEFAULTS, finite, validate
+from gilvy.timeline import compile_timeline
 
 
 def apply_measured_tracks(spec, report, time_origin=0, *, allow_estimated=False,
@@ -28,6 +29,7 @@ def apply_measured_tracks(spec, report, time_origin=0, *, allow_estimated=False,
             nodes[node['id']]=node
             if node['type']=='group':walk(node['children'])
     validate(result);walk(result['layers']);seen=set();audit=[]
+    timeline=compile_timeline(result)
     for track in report['tracks']:
         if not isinstance(track,dict):raise GilvyError('invalid measured track')
         layer=track.get('layer');prop=track.get('property')
@@ -48,9 +50,10 @@ def apply_measured_tracks(spec, report, time_origin=0, *, allow_estimated=False,
                 or not finite(sample.get('time')) or not finite(sample.get('value'))):
                 raise GilvyError('unresolved, estimated or low-confidence measurement; review before import')
             estimated+=int(status=='estimated')
-            keys.append([sample['time']-time_origin,sample['value'],'linear'])
+            keys.append([sample['time']-time_origin-timeline[layer].origin,sample['value'],'linear'])
         nodes[layer].setdefault('keyframes',{})[prop]=keys
-        audit.append({'layer':layer,'property':prop,'samples':len(keys),'estimated_samples':estimated})
+        audit.append({'layer':layer,'property':prop,'samples':len(keys),'estimated_samples':estimated,
+                      'track_origin':timeline[layer].origin})
     validate(result)
     return result, {'source':report['source'],'time_origin':time_origin,
                     'minimum_confidence':minimum_confidence,'tracks':audit,

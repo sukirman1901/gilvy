@@ -221,6 +221,13 @@ def run(argv: list[str] | None = None) -> int:
     pp.add_argument("spec")
     pp.add_argument("--out", required=True)
     pp.add_argument("--times", nargs="+", type=float)
+    inspect = sub.add_parser("inspect-product", help="native frame and layer timing/state")
+    inspect.add_argument("spec")
+    inspect.add_argument("--frame", type=int, required=True)
+    inspect.add_argument("--out", required=True)
+    serve_product = sub.add_parser("serve-product", help="local frame-seeking viewer (silent)")
+    serve_product.add_argument("spec")
+    serve_product.add_argument("--port", type=int, default=8765)
     sub.add_parser("product-notes", help="read product motion schema and directing guidance")
 
     sub.add_parser("elements", help="list composable visual elements and their verbs")
@@ -233,8 +240,27 @@ def run(argv: list[str] | None = None) -> int:
             print(json.dumps(download_reference(args.url,args.out,args.max_height,args.max_duration,
                                                 args.max_size_mb,args.timeout),indent=2))
             return 0
+        if args.command == "inspect-product":
+            from gilvy.product_preview import inspect_product_frame
+            print(json.dumps(inspect_product_frame(args.spec,args.frame,args.out),indent=2))
+            return 0
+        if args.command == "serve-product":
+            from gilvy.product_preview import preview_server
+            try:
+                server = preview_server(args.spec,args.port)
+            except OSError as exc:
+                raise GilvyError(f"could not start local preview: {exc}") from exc
+            print(f"Gilvy preview: http://127.0.0.1:{server.server_port}", flush=True)
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                server.server_close()
+            return 0
         if args.command == "product-notes":
-            print(Path(__file__).with_name("PRODUCT_MOTION.md").read_text())
+            from gilvy.product import product_notes
+            print(product_notes())
             return 0
         if args.command == "render-product":
             print(json.dumps(render_product(args.spec,args.out,args.start,args.duration),indent=2))
