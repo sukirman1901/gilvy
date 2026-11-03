@@ -2,7 +2,15 @@
 
 from functools import lru_cache
 
-from PIL import Image, ImageColor, ImageDraw, ImageFont
+from PIL import (
+    Image,
+    ImageColor,
+    ImageDraw,
+    ImageFont,
+    ImageOps,
+    UnidentifiedImageError,
+)
+from gilvy.errors import GilvyError
 
 from gilvy.theme import bundled_fonts
 from gilvy.product_design import inbox, inbox_part
@@ -32,6 +40,18 @@ def component(node, progress=1.0):
     d = ImageDraw.Draw(im)
     kind = node["type"]
     accent = node.get("accent", "#178cf2")
+    if kind == "image":
+        try:
+            with Image.open(node["src"]) as source:
+                fitted = ImageOps.contain(
+                    source.convert("RGBA"), (w, h), Image.Resampling.LANCZOS
+                )
+            im.alpha_composite(
+                fitted, ((w - fitted.width) // 2, (h - fitted.height) // 2)
+            )
+            return im
+        except (OSError, UnidentifiedImageError, ValueError) as exc:
+            raise GilvyError(f"could not read product image: {exc}") from exc
     if kind == "inbox-part":
         return inbox_part(node["part"], node.get("content"), progress).resize(
             (w, h), Image.Resampling.LANCZOS

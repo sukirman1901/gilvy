@@ -93,11 +93,21 @@ text deliberately larger than its plane will crop. Inspect at delivery size.
 | `menu` | title, items, selected, accent | Dropdown surface; progress reveals rows |
 | `panel` | variant, brand, mark, badge, title, items, accent, fill | Shared UI frame; variants inbox/form/workflow |
 | `group` | children | Compose child planes, then transform/clip the whole group |
+| `image` | src | Local raster asset, aspect-contained and centered in its plane with alpha preserved |
 | `inbox-part` | part, content | Native inbox surfaces: shell, sidebar, conversations, thread, customer, knowledge, reply |
 
 Detailed inbox panels accept `content` fields documented in the design review.
 They use the same measured layout as independently animated inbox parts. Use
 native 1280x760 for a full reference; smaller planes scale it and do not reflow.
+
+Image `src` resolves relative to the film YAML (including inside groups). URLs
+are rejected; missing files fail before encoding. A decoded raster's first
+frame is used; animated images do not become video textures. The caller's spec
+is not mutated when paths are resolved. Images are cached by layer like other
+static components. The native integer-translation path avoids unnecessary
+projective resampling of aligned UI child planes.
+
+For a longer staged example see [the 95-second product-film builder](../../examples/product/launch/README.md).
 
 Inbox panels accept `navigation` and `subtitle`. Form `items` use
 `Label: Value` strings and accept `button`. Workflow items are numbered steps

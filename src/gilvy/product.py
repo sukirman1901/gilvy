@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import copy
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,17 @@ EASES = {
     "out_cubic": lambda t: 1 - (1 - t) ** 3,
     "in_cubic": lambda t: t**3,
 }
-KINDS = {"text", "rect", "progress", "cursor", "panel", "menu", "group", "inbox-part"}
+KINDS = {
+    "text",
+    "rect",
+    "progress",
+    "cursor",
+    "panel",
+    "menu",
+    "group",
+    "inbox-part",
+    "image",
+}
 PROPS = {
     "id",
     "type",
@@ -65,6 +76,7 @@ PROPS = {
     "selected",
     "content",
     "part",
+    "src",
     *DEFAULTS,
 }
 
@@ -169,6 +181,12 @@ def validate(spec):
             ids.add(identifier)
             if len(ids) > 100:
                 raise GilvyError("product film supports at most 100 layers")
+            if node["type"] == "image" and (
+                not isinstance(node.get("src"), str)
+                or not node["src"]
+                or "://" in node["src"]
+            ):
+                raise GilvyError("image src must be a local filename")
             if node["type"] == "inbox-part" and (
                 not isinstance(node.get("part"), str) or node["part"] not in PARTS
             ):
@@ -369,6 +387,23 @@ def composite(canvas, image, state, shadow=False):
     """Project a transparent plane using an inverse homography, clipped to viewport."""
     if state["opacity"] <= 0:
         return
+    # Exact integer translations need no projective resampling. This is common
+    # for native UI child planes and preserves their original glyph pixels.
+    ix = state["x"] - image.width / 2
+    iy = state["y"] - image.height / 2
+    if (
+        state["scale"] == 1
+        and state["rotation"] == 0
+        and state["tilt_x"] == 0
+        and state["tilt_y"] == 0
+        and state["opacity"] == 1
+        and state["blur"] == 0
+        and not shadow
+        and ix == round(ix)
+        and iy == round(iy)
+    ):
+        canvas.alpha_composite(image, (int(ix), int(iy)))
+        return
     points = project(image.size, state)
     pad = math.ceil(state["blur"] * 3) + (50 if shadow else 2)
     left = max(-pad, math.floor(points[:, 0].min()) - pad)
@@ -413,8 +448,20 @@ def composite(canvas, image, state, shadow=False):
 class ProductFilm:
     def __init__(self, spec, source_dir=Path.cwd()):
         validate(spec)
-        self.spec = spec
+        self.spec = copy.deepcopy(spec)
         self.source_dir = Path(source_dir)
+
+        def resolve_assets(nodes):
+            for node in nodes:
+                if node["type"] == "image":
+                    path = (self.source_dir / node["src"]).resolve()
+                    if not path.is_file():
+                        raise GilvyError(f"image not found: {path}")
+                    node["src"] = str(path)
+                if node["type"] == "group":
+                    resolve_assets(node["children"])
+
+        resolve_assets(self.spec["layers"])
         self.size = tuple(spec.get("size", [1280, 720]))
         self.fps = spec.get("fps", 30)
         self.duration = spec["duration"]

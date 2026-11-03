@@ -220,3 +220,33 @@ def test_real_encode_window_audio_cli_and_mcp(tmp_path):
         == 0
     )
     assert Path(tmp_path / "cli.product.json").is_file()
+
+
+def test_local_images_preserve_aspect_alpha_and_fail_before_encode(tmp_path):
+    from PIL import Image
+
+    asset = Image.new("RGBA", (80, 40), (255, 0, 0, 255))
+    asset.save(tmp_path / "asset.png")
+    s = spec()
+    s["layers"] = [
+        {
+            "id": "asset",
+            "type": "image",
+            "src": "asset.png",
+            "width": 100,
+            "height": 100,
+            "x": 80,
+            "y": 80,
+        }
+    ]
+    film = ProductFilm(s, tmp_path)
+    frame = np.array(film.frame(0.1))
+    assert frame[80, 80, 0] == 255 and frame[40, 80, 0] == 0
+    # Asset resolution must not mutate the caller's reusable spec.
+    assert s["layers"][0]["src"] == "asset.png"
+    s["layers"][0]["src"] = "missing.png"
+    with pytest.raises(GilvyError, match="not found"):
+        ProductFilm(s, tmp_path)
+    s["layers"][0]["src"] = "https://example.com/asset.png"
+    with pytest.raises(GilvyError, match="local filename"):
+        validate(s)
