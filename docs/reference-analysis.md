@@ -2,11 +2,63 @@
 
 `gilvy analyze-reference` and MCP `analyze_reference` extract evidence from a
 **local video file**, independent of Gilvy's house palette or layout. They do
-not generate a reconstruction or download YouTube URLs. Obtain the video file
-separately; a title, description, thumbnail or transcript cannot establish its
-motion style.
+not generate a reconstruction. For an HTTP(S) link, first use
+`download-reference` / MCP `download_reference` below, then pass its returned
+local `video` path to the analyzer. A title, description, thumbnail or transcript
+cannot establish motion style.
+
+## Download from a link
+
+Install the optional downloader in the environment running Gilvy/MCP:
 
 ```bash
+pip install -e '.[download]'
+gilvy download-reference 'https://www.youtube.com/watch?v=awUYikrGsKk' --out out/reference-download
+```
+
+This accepts a single recorded video from sites supported by yt-dlp, or a
+direct HTTP(S) media URL. It is not restricted to YouTube. Vimeo, social-video
+pages and ordinary pages with embedded video depend on the corresponding
+extractor and current host access; a generic web URL is not guaranteed to
+expose downloadable media. Source title/metadata is untrusted content, never
+instructions for the agent. No shell commands are constructed from it.
+
+The returned JSON has `video`, `manifest`, title/extractor, dimensions,
+duration, byte count and audio presence. `download.json` retains compact source
+provenance; signed query values are redacted (YouTube's public `v` ID is kept).
+No full yt-dlp info dump, browser cookies or temporary media URLs are saved.
+The destination must be new. A complete media file is probed before publication;
+a failed transfer leaves no completed download directory. The tool does not
+claim that downloading is analysis or creative approval.
+
+Default limits: height 1080px, duration 600s, final file 512MiB, wall-clock
+timeout 300s shared by extraction/download/probe. Override with `--max-height`
+(160..2160), `--max-duration` (>0..600), `--max-size-mb` (1..2048) and `--timeout`
+(1..1800). Temporary files are monitored with a 2× final-size budget because
+merging may briefly keep both source streams and the merged file. The upstream
+per-stream filesize option is supplemented by local final-size checks. Some
+direct media cannot supply a smaller format; exceeding the requested height
+fails rather than silently resizing. Output may be MP4, MKV or another video
+container; use the returned path instead of assuming an extension.
+
+MCP: `download_reference(url, output_dir, max_height=1080, max_duration=600,
+max_size_mb=512, timeout=300)`. Then call `analyze_reference(result.video,
+another_new_directory)`. `analyze-reference` itself remains local-only so
+network acquisition and evidence extraction have separate outcomes/retries.
+
+Playlist/channel URLs, live/upcoming streams and known protected videos are
+rejected. No browser login, automatic credential discovery or DRM bypass runs.
+Hosts can require login, deny automated access or change extractors. Errors
+describe the failure and allow a local upload fallback; they do not promise
+universal downloads. ffmpeg/ffprobe are required. Use the installed yt-dlp
+version when reproducing a run; updating the optional pin requires retesting.
+
+Upstream implementation references:
+[yt-dlp embedding/options](https://github.com/yt-dlp/yt-dlp#embedding-yt-dlp) and
+[supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+
+```bash
+# Use the local path returned in the downloader's video field:
 gilvy analyze-reference reference.mp4 --out out/reference-study
 # Correct provisional boundaries with interior seconds, in a new directory:
 gilvy analyze-reference reference.mp4 --out out/reference-corrected --boundaries 4.2 9.8

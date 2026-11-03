@@ -14,6 +14,7 @@ from gilvy.qc import qc_video
 from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
 from gilvy.review import compare_versions
 from gilvy.reference import analyze_reference
+from gilvy.reference_download import download_reference
 from gilvy.product_render import render_product, preview_product
 from gilvy.elements import element_catalog, motion_reference_notes
 
@@ -193,6 +194,14 @@ def run(argv: list[str] | None = None) -> int:
     compare.add_argument("--duration", type=float, default=8)
     compare.add_argument("--sample-fps", type=float, default=2)
 
+    download = sub.add_parser("download-reference", help="fetch one supported-site or direct HTTP(S) video")
+    download.add_argument("url")
+    download.add_argument("--out", required=True, help="new download directory")
+    download.add_argument("--max-height", type=int, default=1080)
+    download.add_argument("--max-duration", type=float, default=600)
+    download.add_argument("--max-size-mb", type=int, default=512)
+    download.add_argument("--timeout", type=float, default=300)
+
     reference = sub.add_parser("analyze-reference", help="extract local reference video into scene evidence")
     reference.add_argument("video")
     reference.add_argument("--out", required=True, help="new output directory")
@@ -220,6 +229,10 @@ def run(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "download-reference":
+            print(json.dumps(download_reference(args.url,args.out,args.max_height,args.max_duration,
+                                                args.max_size_mb,args.timeout),indent=2))
+            return 0
         if args.command == "product-notes":
             print(Path(__file__).with_name("PRODUCT_MOTION.md").read_text())
             return 0
