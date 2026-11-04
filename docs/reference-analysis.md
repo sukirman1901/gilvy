@@ -17,7 +17,10 @@ gilvy download-reference 'https://www.youtube.com/watch?v=awUYikrGsKk' --out out
 ```
 
 This accepts a single recorded video from sites supported by yt-dlp, or a
-direct HTTP(S) media URL. It is not restricted to YouTube. Vimeo, social-video
+direct HTTP(S) media URL. It is not restricted to YouTube. YouTube hosts
+(`youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`) pass
+`--js-runtimes node:<path>` when `node` is on `PATH`, because yt-dlp's default
+runtime is Deno. Other hosts keep that default. Vimeo, social-video
 pages and ordinary pages with embedded video depend on the corresponding
 extractor and current host access; a generic web URL is not guaranteed to
 expose downloadable media. Source title/metadata is untrusted content, never

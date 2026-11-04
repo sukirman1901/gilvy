@@ -281,7 +281,115 @@ scenes:
     render.render_episode(load_episode(path), video, "fixture", 1)
     shot = detect_shot(video)
     fade = next(item for item in shot["events"] if item["effect"] == "dissolve")
-    assert fade["duration"] == pytest.approx(1.0, abs=0.15)
+    # Length is the 2%..98% alpha span, not the full overlap. easeInCubic
+    # reaches those levels at cbrt(0.02) and cbrt(0.98) of the blend.
+    span = 0.98 ** (1.0 / 3.0) - 0.02 ** (1.0 / 3.0)
+    assert fade["duration"] == pytest.approx(1.0 * span, abs=0.08)
+    assert fade["ease"] in {"easeInCubic", "easeInQuad", "expoIn"}
+
+
+def test_shake_does_not_inflate_zoom(tmp_path, monkeypatch):
+    _, video, _ = _render(tmp_path, monkeypatch, """
+name: shake-zoom
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["push"]
+    min: 1.21
+    image: plate.png
+    grade: none
+    grain: 0
+    effects:
+      - {kind: shake, amp: 36, freq: 10}
+    camera:
+      tracks:
+        - property: scale
+          keys:
+            - {t: 0.0, v: 1.0, ease: easeOutQuad}
+            - {t: 1.21, v: 1.148, ease: linear}
+        - property: x
+          keys:
+            - {t: 0.0, v: 0, ease: easeOutQuad}
+            - {t: 1.21, v: -42, ease: linear}
+        - property: y
+          keys:
+            - {t: 0.0, v: 0, ease: easeOutQuad}
+            - {t: 1.21, v: -67, ease: linear}
+""")
+    shot = detect_shot(video)
+    zoom = next(item for item in shot["events"] if item["effect"] == "zoom")
+    shake = next(item for item in shot["events"] if item["effect"] == "shake")
+    authored = 100 * math.log(1.148) / 1.21
+    assert zoom["zoom_pct_per_s"] == pytest.approx(authored, rel=0.05)
+    assert shake["hz"] == pytest.approx(10, abs=1.5)
+
+
+@pytest.mark.parametrize("end_scale", [1.02, 0.98])
+def test_small_zoom_keeps_its_sign(tmp_path, monkeypatch, end_scale):
+    _, video, _ = _render(tmp_path, monkeypatch, f"""
+name: small
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["small"]
+    min: 1.2
+    image: plate.png
+    grade: none
+    grain: 0
+    camera:
+      tracks:
+        - property: scale
+          keys:
+            - {{t: 0.0, v: 1.0, ease: linear}}
+            - {{t: 1.2, v: {end_scale}, ease: linear}}
+""")
+    shot = detect_shot(video)
+    zoom = next(item for item in shot["events"] if item["effect"] == "zoom")
+    authored = 100 * math.log(end_scale) / 1.2
+    assert zoom["zoom_pct_per_s"] == pytest.approx(authored, rel=0.05)
+    assert (zoom["zoom_pct_per_s"] > 0) == (end_scale > 1)
+
+
+def test_ease_in_dissolve_uses_alpha_span(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "theme_for", lambda ep: _theme())
+    Image.new("RGBA", (480, 840), (210, 40, 30, 255)).save(tmp_path / "a.png")
+    Image.new("RGBA", (480, 840), (20, 30, 40, 255)).save(tmp_path / "b.png")
+    path = tmp_path / "ep.yaml"
+    path.write_text("""
+name: fade
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["out"]
+    min: 2.2
+    image: a.png
+    grade: none
+    grain: 0
+    transition_out: dissolve
+    transition: 1.5
+    transition_ease: easeInCubic
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.02}
+  - type: image
+    caption: ["in"]
+    min: 1.2
+    image: b.png
+    grade: none
+    grain: 0
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.02}
+""", encoding="utf-8")
+    video = tmp_path / "fade.mp4"
+    render.render_episode(load_episode(path), video, "fixture", 1)
+    shot = detect_shot(video)
+    fade = next(item for item in shot["events"] if item["effect"] == "dissolve")
+    span = 0.98 ** (1.0 / 3.0) - 0.02 ** (1.0 / 3.0)
+    assert fade["duration"] == pytest.approx(1.5 * span, abs=0.08)
     assert fade["ease"] in {"easeInCubic", "easeInQuad", "expoIn"}
 
 
@@ -354,10 +462,8 @@ def test_vox_replica_table_records_the_check():
     assert rows
     for row in rows:
         assert {"effect", "ref", "replica", "delta", "pass"} <= set(row)
-    by_name = {row["effect"]: row for row in rows}
-    assert by_name["shake Hz"]["pass"] is True
-    assert by_name["whip present"]["pass"] is True
-    assert by_name["pull rotation deg"]["pass"] is True
+    failed = [row["effect"] for row in rows if not row["pass"]]
+    assert failed == []
 
 
 def test_inventory_pins_and_vox_template():

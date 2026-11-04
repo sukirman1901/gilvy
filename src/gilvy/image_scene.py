@@ -280,7 +280,10 @@ def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: fl
     zoom froze or shrank the scale and the shift was measured as almost nothing.
     """
     ch, cw = plate.shape[:2]
-    scale = max(1.0, float(scale))
+    # Tracks may pull down to 0.5. A floor of 1 drew those pulls as a hold, so a
+    # 7% zoom-out never reached the detector. From/to shorthand still rejects
+    # scale below 1 before this blit runs.
+    scale = max(0.5, float(scale))
     cover = max(cw / max(1, image.width), ch / max(1, image.height))
     # A plate smaller than the frame is scaled up to cover it. A plate that
     # already covers the frame keeps its extra pixels as pan and zoom margin.

@@ -21,6 +21,23 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from gilvy.errors import GilvyError
 
 
+# yt-dlp's default JS runtime is Deno. YouTube extraction on this toolchain
+# uses Node when it is installed; other hosts are left on the yt-dlp default.
+_YOUTUBE_HOSTS = frozenset({
+    "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
+})
+
+
+def _js_runtime_args(url: str) -> list[str]:
+    host = (urlsplit(url).hostname or "").lower()
+    if host not in _YOUTUBE_HOSTS:
+        return []
+    node = shutil.which("node")
+    if not node:
+        return []
+    return ["--js-runtimes", f"node:{node}"]
+
+
 def _source_url(url: str) -> str:
     """Keep source identity without persisting signed download query tokens."""
     parts = urlsplit(url)
@@ -127,6 +144,7 @@ def download_reference(url: str, output_dir: str | Path, max_height: int = 1080,
     common = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-playlist',
               '--no-warnings', '--quiet', '--socket-timeout', '15', '--retries', '1',
               '--fragment-retries', '1', '--extractor-retries', '1', '--no-cache-dir', '--playlist-end', '1']
+    common.extend(_js_runtime_args(url))
     try:
         metadata = json.loads(_run(common + ['--dump-single-json', '--skip-download',
                     '--flat-playlist', '--', url], deadline))
