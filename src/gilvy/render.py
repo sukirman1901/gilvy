@@ -8,7 +8,7 @@ import multiprocessing
 import subprocess
 import sys
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +21,7 @@ from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.image_scene import camera_metrics, render_image_frame, zoom_through
-from gilvy.presets import PHOTO_PRESETS
+from gilvy.presets import PHOTO_PRESETS, RULES
 from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
@@ -31,13 +31,17 @@ _STATE: RenderState | None = None
 
 
 def theme_for(episode: Episode) -> Theme:
-    return Theme.from_profile(
+    theme = Theme.from_profile(
         episode.format,
         bg=tuple(episode.bg),
         white=tuple(episode.white),
         green=tuple(episode.green),
         font_dir=episode.font_dir or str(bundled_fonts()),
     )
+    rules = RULES.get(episode.style)
+    if rules and "pad" in rules:
+        theme = replace(theme, pad=float(rules["pad"]), lead=float(rules["lead"]))
+    return theme
 
 
 def scene_payload(scene: Scene, episode: Episode) -> dict:

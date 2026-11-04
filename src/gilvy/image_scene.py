@@ -70,7 +70,8 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
     if not isinstance(prompt, str):
         raise EpisodeError(f"scene {index}: prompt must be a string")
     params["prompt"] = prompt.strip()
-    params["overlays"] = _overlays(raw.get("overlays") or [], index, rules)
+    params["text_fade_s"] = _fade_seconds(raw.get("text_fade_s", rules["text_fade_s"]), index)
+    params["overlays"] = _overlays(raw.get("overlays") or [], index, rules, params["text_fade_s"])
     _metrics_or_raise(params["camera"], index, style)
     return params
 
@@ -225,11 +226,12 @@ def _grade(plate: np.ndarray, grade: str) -> np.ndarray:
         return plate
     r, g, b = plate[:, :, 0], plate[:, :, 1], plate[:, :, 2]
     if grade == "sepia":
-        tr = 0.393 * r + 0.769 * g + 0.189 * b
-        tg = 0.349 * r + 0.686 * g + 0.168 * b
-        tb = 0.272 * r + 0.534 * g + 0.131 * b
-        out = np.stack([tr, tg, tb], axis=-1)
-        return np.clip(out * 0.92 + np.array([18, 12, 6], np.float32), 0, 255)
+        # Two poles measured on ref3: shadow #261c15, highlight #d3c0aa.
+        # Luminance remaps between them. The old matrix lifted whites to #faedb4.
+        luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+        shadow = np.array([0x26, 0x1C, 0x15], np.float32)
+        highlight = np.array([0xD3, 0xC0, 0xAA], np.float32)
+        return shadow + (highlight - shadow) * luma[..., None]
     y = 0.2126 * r + 0.7152 * g + 0.0722 * b
     # Measured ref2 paper poles are about #131313 and #dadada.
     paper = 19.0 + y / 255.0 * (218.0 - 19.0)
@@ -302,7 +304,8 @@ def _draw_text(layer, item, u, start, theme, x0, y0):
     local = u - start
     hold = float(item["hold"])
     if item["entrance"] == "fade":
-        appear = cl(local / 0.45)
+        fade_s = float(item.get("fade", 0.45))
+        appear = 1.0 if fade_s <= 0 else cl(local / fade_s)
     elif item["entrance"] == "slide":
         appear = eo(cl(local / 0.28))
     else:
@@ -428,7 +431,13 @@ def _point(raw, index: int, name: str) -> dict:
     return {"scale": float(scale), "x": float(x), "y": float(y)}
 
 
-def _overlays(raw, index: int, rules: dict) -> list[dict]:
+def _fade_seconds(value, index: int) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= float(value) <= 2:
+        raise EpisodeError(f"scene {index}: text_fade_s must be seconds from 0 to 2")
+    return float(value)
+
+
+def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
     if not isinstance(raw, list):
         raise EpisodeError(f"scene {index}: overlays must be a list")
     if len(raw) > 8:
@@ -455,7 +464,8 @@ def _overlays(raw, index: int, rules: dict) -> list[dict]:
             if entrance not in _ENTRANCES or font not in _FONTS_NAMED:
                 raise EpisodeError(f"scene {index}: text entrance must be fade, pop, or slide; font must be serif or sans")
             parsed.update(text=item["text"], entrance=entrance, font=font,
-                          size=_num(item.get("size", 72), index, "size", 12, 180),
+                          size=_num(item.get("size", rules["text_size"]), index, "size", 12, 480),
+                          fade=_fade_seconds(item.get("text_fade_s", fade_s), index),
                           hold=_seconds(item.get("hold", 1.6), index, "hold"),
                           x=_num(item.get("x", DESIGN_W / 2), index, "x", -200, 1400),
                           y=_num(item.get("y", 780), index, "y", -200, 2100))

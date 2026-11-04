@@ -146,11 +146,15 @@ gilvy render examples/styles/history-story.yaml --tts fixture
 gilvy qc out/history-story-sample.mp4
 ```
 
-`gilvy assets` lists every PNG the episode needs and a style prompt for each.
-Render fails with those paths if a file is missing. Generate the art outside
-the repo. Do not commit frames from the reference. Samples under
-`examples/styles/` use procedural stand-in plates. MCP adds `reference_styles`
-and `asset_manifest`.
+`gilvy assets episode.yaml --reference video.mp4` lists every PNG, the fixed
+prompt template, an overscan size so pan and zoom stay inside the picture, and
+style frames from the video. When a PNG is already there it compares brightness,
+contrast, and colour and adds a regen hint on a miss. Render fails if a path is
+missing. Generate the art outside the repo. Do not commit frames from the
+reference. Samples under `examples/styles/` use procedural stand-in plates.
+MCP `asset_manifest` takes the same optional reference. `history-story` uses
+pad/lead 0, a 0.15 s text fade, 216 px emphasis type, and a two-pole sepia
+(`#261c15` to `#d3c0aa`). edge-tts is pinned to 7.3.1.
 
 ## Opt-in product motion
 

@@ -10,7 +10,7 @@ Workflow for an agent:
 1. `download-reference` when the source is a link, then `analyze-reference` on the local file.
 2. Watch every motion clip. Read `soft_transitions` as dissolve **candidates**, not as scene cuts.
 3. Pick one preset. Do not mix their grades in one episode.
-4. `gilvy assets episode.yaml` and generate every missing PNG outside the repo. Do not commit frames from the reference.
+4. `gilvy assets episode.yaml --reference video.mp4` and generate every missing PNG outside the repo. Do not commit the style frames.
 5. `preview`, a short `preview-motion`, then `render` and `qc`.
 
 `type: image` is valid only under these two styles. Render fails with the missing path if a plate is absent.
@@ -113,11 +113,11 @@ Use this for a painterly sepia story: one still per beat, slow push or pull, hea
 | ~14.3 s | Board gives way to the table across roughly **14.6–15.0 s** (**observed**). A red circle is still drawing on the board through ~14.4 s | **14.16–14.88 s** (score 0.62, endpoint delta 48) |
 | ~18.0 s | The table is already dark (~42 gray). The bright window picture arrives about **18.8–19.2 s** (**measured** mean luminance). Not a fade to black | Not confirmed as a cross-dissolve. A later candidate at **19.72–20.08 s** is a different hit. **Uncertain** |
 
-**Conformance band: 1.60–7.00 s.** That covers the real beats once the 18 s bin is split, and it excludes the 0.12–0.16 s end flashes (**measured**). One measured hard-cut fragment is 1.12 s; treat it as an end sting, outside the default band.
+**Conformance band: 1.10–7.00 s.** A 31.9 s voice recreation needed the 1.12 s measured fragment inside the band. The 0.12–0.16 s end flashes stay outside it.
 
 The detector also returns other candidates (about 15.0, 19.7, 20.4, 23.2, 29.9, 31.3 s on this file). Some are end-card flashes or motion inside a shot. **Watch the clip** before promoting one to `--boundaries`. A synthetic 0.4 s crossfade is detected. A one-frame cut and a slow zoom are not.
 
-Author dissolves at **0.40 s** (**observed** order of magnitude 0.3–0.5 s; the detector’s windows on this file run about 0.36–0.80 s). Ease is linear alpha (**inferred**).
+Author dissolves at **0.40 s** (**observed** order of magnitude 0.3–0.5 s; the detector’s windows on this file run about 0.36–0.80 s). Ease is linear alpha (**inferred**). A consistency test locks a detected 0.40 s crossfade to **±0.10 s**.
 
 ### Camera
 
@@ -134,10 +134,11 @@ The shot study calls the push **slow and linear**. Combined with the flat stretc
 
 ### Grade, grain, type, circle
 
-- `grade: sepia`. **Measured** dominant colors include `#d3c0aa`, `#44362c`, `#6c462f`, `#261c15`. The grade is a fixed matrix plus a small warm lift, **fitted** to that family, not a LUT taken from the file.
+- `grade: sepia` remaps luminance between two measured poles: shadow **#261c15** and highlight **#d3c0aa**. A classic matrix plus a warm lift pushed highlights to about **#faedb4** (too bright and yellow). This is a two-pole grade, not a recovered LUT. QC skips the green-tint check on this style because sepia browns were false positives.
 - `grain: 0.16–0.24`. Heavy grain and a canvas weave are **observed** on the stills. The 0–1 amount is **not** a measured noise sigma.
 - Emphasis text is centered, one short phrase, red. A frame at 5.0 s (“Victor Lustig”) is **serif** (**observed**). Pixels that passed a red threshold there have median about **(178, 74, 66)** (**measured**, antialiasing included). That is the default overlay color. Whether “DISAPPEARED” is serif or sans was **not** isolated. **Uncertain.** Default remains serif; set `font: sans` if the phrase is the blunt one.
-- Entrance is a **fade of about 0.45 s** (**inferred** from “slow linear fade”). It starts **0.15 s after** the keyword’s share of `vo` when you use `keyword` (**observed** as “slightly lagging”; the 0.15 s is a preset choice, **uncertain**).
+- Default size is **216** design pixels, three times the old 72. On the Lustig recreation 72 px still read about **nine times** smaller than the reference, so 216 is a round-1 correction, not a match. Set `size` when a phrase needs to go further (the cap is 480).
+- Entrance fade is **`text_fade_s: 0.15`** (scene or overlay). The old 0.45 s fade reached full opacity about **0.32 s late**. A consistency test locks full opacity to **±0.20 s** of `at + text_fade_s`. `keyword` still starts **0.15 s after** that word’s share of `vo` (**observed** lag; the 0.15 s offset is a preset choice, **uncertain**).
 - The red circle on the documents draws itself from about **13.2 s to 14.4 s** (**observed** on the 0.2 s strip), so about **1.2 s**, with a scribble cue (**observed**, not synthesized). Author `kind: circle` with `duration` near 0.8–1.2 s. The shot study’s “~13 s” matches the start, not a 0.3 s flick.
 - A brown card with white sans (“And the strangest part?”) is **observed** in the shot study and was not re-cropped here. Use `font: sans` and a paper-colored plate if you cut that beat. **Uncertain** on the exact wording’s timing.
 - The film ends by fading out. House outros already fade. The music swell is **observed** and not generated.
@@ -145,6 +146,8 @@ The shot study calls the push **slow and linear**. Combined with the flat stretc
 ### Sound
 
 **Measured:** −21.0 LUFS integrated, loudness range 2.1, speech-band ratio 0.26, no silence gap at the measurement’s threshold. No VTT. Speech-vs-music was **not** re-checked by ear in this pass. **Uncertain** how dry the voice is. Use `voiceover` plus the existing ducking when there is narration; `silent` is only for a layout proof.
+
+Voice length: the house show adds `pad` 0.4 s and `lead` 0.2 s after every spoken line. On a pure voice recreation that extra 0.6 s per scene, plus edge-tts leading and trailing silence, made **35.6 s** out of the **31.9 s** reference. `history-story` sets both to **0**. edge-tts clips are trimmed at both ends before the duration is measured. Vox keeps the house 0.4 / 0.2 until it has its own timing pass. A consistency test locks an authored zoom rate to **±20%** of the rate the camera math reports.
 
 ## QC
 
@@ -154,13 +157,18 @@ For these two styles, technical QC adds three checks on each `type: image` scene
 - the plate is not static
 - zoom, when it is the move, stays inside the plate band (a punch stays on `transition_out`)
 
-House QC is unchanged. Passing QC is still not a creative verdict. Compare a proof against the reference with `gilvy compare` when you are matching a beat. Equality of pixels is not the goal: the references are not the asset library.
+`history-story` does not run the green-tint check. House QC is otherwise unchanged. Passing QC is still not a creative verdict. Compare a proof against the reference with `gilvy compare` when you are matching a beat. Equality of pixels is not the goal: the references are not the asset library.
+
+## Assets
+
+`gilvy assets episode.yaml --reference video.mp4` writes four interior frames (style refs, not committed plates) and prints one fixed prompt template per style. history-story’s template is **archival photo, sepia, grain, vignette, framing**. Each plate’s pixel size is the 1080×1920 frame plus the camera’s pan margin, multiplied by the tightest zoom, so the move does not run out of picture. When the PNG already exists, the manifest compares its brightness, contrast, and colour to those frames and, on a miss, sets `image_qc.regen` with what to change.
 
 ## Gaps
 
 - No automatic layer split, hole fill, or face track.
 - No film LUT, no measured grain sigma, no synthesized SFX.
 - Keyword timing is a share of the line, not phoneme alignment.
+- Emphasis at 216 px is 3× the old default and still short of the reference titles, which read about 9× the old 72 px.
 - Dissolve detection misses a one-frame join (ref3 at 5.68 s) and can add extra candidates inside a moving shot. Confirm on the clips.
 - Image plates are drawn at delivery resolution. House scenes stay 2× supersampled. That difference is visible on type edges if you mix a house scene into a photo episode; keep a photo episode on `type: image`.
 - ref3 parallax was not shown to be more than the push.

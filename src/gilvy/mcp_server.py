@@ -356,15 +356,22 @@ def reference_styles() -> str:
 
 
 @mcp.tool()
-def asset_manifest(episode_path: str) -> str:
+def asset_manifest(episode_path: str, reference: str = "", refs_out: str = "") -> str:
     """List image plates an episode must generate before render, with style prompts.
 
-    Missing files are listed and render_video fails until they exist. This does
-    not generate images and does not copy frames from a reference video.
+    Pass a local reference video to extract style frames, size each plate with
+    overscan for its pan and zoom, and compare an existing plate's colour,
+    contrast, and brightness. A miss includes a regen hint. This does not
+    generate images and does not copy reference frames into the episode.
     """
-    from gilvy.assets import build_manifest
+    from gilvy.assets import build_manifest, extract_style_refs
     try:
-        return json.dumps({"ok": True, **build_manifest(load_episode(episode_path))})
+        episode = load_episode(episode_path)
+        refs = None
+        if reference:
+            dest = Path(refs_out).expanduser() if refs_out else episode.source_dir / "style-refs"
+            refs = extract_style_refs(reference, dest)
+        return json.dumps({"ok": True, **build_manifest(episode, refs)})
     except GilvyError as exc:
         return _fail(exc)
 

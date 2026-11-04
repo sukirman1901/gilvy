@@ -30,7 +30,7 @@ scenes:
         hold: 1.5
         entrance: fade
         font: serif
-        size: 72
+        size: 216
         color: [178, 74, 66]
         sfx: sting
 
@@ -81,5 +81,5 @@ scenes:
         hold: 1.4
         entrance: fade
         font: serif
-        size: 68
+        size: 204
         color: [178, 74, 66]
