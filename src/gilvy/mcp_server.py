@@ -319,7 +319,8 @@ def compare_versions(reference_video: str, candidate_video: str, output_dir: str
                      duration: float = 8, sample_fps: float = 2) -> str:
     """Create paired frames and pixel differences for an approved clip and a revision.
 
-    Use matching resolutions. Align the starts explicitly if the clip moved.
+    Mismatched frame sizes are scaled to the reference. Duration may cover the
+    whole clip (up to 600s and 240 samples). Align the starts explicitly if the clip moved.
     Results are sampled evidence, not a creative score or proof of continuity.
     An approved sample's outro may intentionally differ in the full version;
     inspect that difference rather than hiding or automatically approving it.

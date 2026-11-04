@@ -14,6 +14,15 @@ from gilvy.errors import GilvyError
 from gilvy.qc import _grab, _probe
 
 
+def _fitted_frame(path: Path, time: float, native: tuple[int, int], target: tuple[int, int]) -> np.ndarray:
+    """Decode at the file's size, then scale to the reference frame when they differ."""
+    frame = _grab(path, time, native[0], native[1])
+    if native == target:
+        return frame
+    image = Image.fromarray(frame).resize(target, Image.Resampling.BILINEAR)
+    return np.asarray(image)
+
+
 def compare_versions(reference_video: str | Path, candidate_video: str | Path,
                      output_dir: str | Path, reference_start: float = 0,
                      candidate_start: float = 0, duration: float = 8,
@@ -27,8 +36,8 @@ def compare_versions(reference_video: str | Path, candidate_video: str | Path,
     values = (reference_start, candidate_start, duration, sample_fps)
     if not all(math.isfinite(v) for v in values) or min(reference_start, candidate_start) < 0:
         raise GilvyError("comparison values must be finite and starts must be >= 0")
-    if not 0 < duration <= 12 or not 0 < sample_fps <= 4:
-        raise GilvyError("comparison duration must be > 0 and <= 12; sample_fps must be > 0 and <= 4")
+    if not 0 < duration <= 600 or not 0 < sample_fps <= 4:
+        raise GilvyError("comparison duration must be > 0 and <= 600; sample_fps must be > 0 and <= 4")
     paths = [Path(reference_video).expanduser().resolve(), Path(candidate_video).expanduser().resolve()]
     pictures = []
     lengths = []
@@ -47,16 +56,17 @@ def compare_versions(reference_video: str | Path, candidate_video: str | Path,
             rate = 0
         rates.append(rate)
         lengths.append(float(info.get("format", {}).get("duration", 0)))
-    if pictures[0] != pictures[1]:
-        raise GilvyError("compare matching frame sizes; render both clips at the same delivery profile")
     available = min(lengths[0] - reference_start, lengths[1] - candidate_start)
     duration = min(duration, available)
     if duration <= 0:
         raise GilvyError("comparison start is outside a video")
-    count = min(48, max(1, math.ceil(duration * sample_fps)))
+    count = max(1, math.ceil(duration * sample_fps))
+    if count > 240:
+        raise GilvyError("comparison would sample more than 240 frames; lower --sample-fps or --duration")
     # Seek only at playable frame starts, including on low-fps material.
     offsets = np.linspace(0, duration, count, endpoint=False)
     width, height = pictures[0]
+    rescaled = pictures[0] != pictures[1]
     thumb_w = 240
     thumb_h = max(1, round(height * thumb_w / width))
     row_h = thumb_h + 24
@@ -68,8 +78,8 @@ def compare_versions(reference_video: str | Path, candidate_video: str | Path,
         for j, rate in enumerate(rates):
             if rate > 0:
                 times[j] = math.floor(min(times[j], max(0, lengths[j] - 1 / rate)) * rate + 1e-7) / rate
-        a = _grab(paths[0], times[0], width, height)
-        b = _grab(paths[1], times[1], width, height)
+        a = _fitted_frame(paths[0], times[0], pictures[0], (width, height))
+        b = _fitted_frame(paths[1], times[1], pictures[1], (width, height))
         delta = np.abs(a.astype(np.int16) - b.astype(np.int16))
         rows.append({
             "reference_time": round(times[0], 6),
@@ -93,7 +103,7 @@ def compare_versions(reference_video: str | Path, candidate_video: str | Path,
         "reference_start": reference_start, "candidate_start": candidate_start,
         "duration": duration, "sheet": str(sheet_path), "samples": rows,
         "identical_sampled_frames": sum(r["identical"] for r in rows),
-        "sample_count": count, "creative_review": "required",
+        "sample_count": count, "rescaled": rescaled, "creative_review": "required",
         "limitations": "Sampled pixel evidence only; encoding noise, fades, and timing changes also differ. Not an approval or quality score.",
     }
     (dest / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

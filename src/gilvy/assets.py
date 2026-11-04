@@ -110,16 +110,23 @@ def _stats(path: Path) -> dict:
 
 
 def compare_asset(path: str | Path, refs: list) -> dict:
-    """Colour, contrast, and brightness against style frames. A miss includes a regen hint."""
-    ref_paths = [Path(item["path"] if isinstance(item, dict) else item) for item in refs]
-    ref_paths = [item for item in ref_paths if item.is_file()]
-    if not ref_paths:
+    """Match the plate to the reference frame in the nearest brightness bucket.
+
+    One global average made a dark shot fail against a bright title card.
+    """
+    pairs = []
+    for item in refs:
+        ref_path = Path(item["path"] if isinstance(item, dict) else item)
+        if ref_path.is_file():
+            pairs.append((item if isinstance(item, dict) else {"path": str(ref_path)}, ref_path))
+    if not pairs:
         raise GilvyError("image QC needs at least one style reference frame")
     plate = _stats(Path(path))
-    samples = [_stats(item) for item in ref_paths]
-    luma = float(np.median([item["luma"] for item in samples]))
-    contrast = float(np.median([item["contrast"] for item in samples]))
-    rgb = np.median([item["rgb"] for item in samples], axis=0)
+    samples = [(item, _stats(ref_path)) for item, ref_path in pairs]
+    match_item, match = min(samples, key=lambda pair: abs(plate["luma"] - pair[1]["luma"]))
+    luma = float(match["luma"])
+    contrast = float(match["contrast"])
+    rgb = match["rgb"]
     flags = []
     if abs(plate["luma"] - luma) > BRIGHTNESS_TOL:
         flags.append(f"brightness {plate['luma']:.0f} vs reference {luma:.0f}")
@@ -147,6 +154,8 @@ def compare_asset(path: str | Path, refs: list) -> dict:
         "reference_colour": [round(float(v), 2) for v in rgb],
         "flags": flags,
         "regen": regen,
+        "matched_ref": match_item.get("time"),
+        "match": "brightness",
     }
 
 

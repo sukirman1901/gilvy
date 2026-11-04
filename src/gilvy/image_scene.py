@@ -19,7 +19,7 @@ from gilvy.presets import HISTORY, PHOTO_PRESETS, RULES, VOX
 
 _CACHE: dict[tuple, Image.Image] = {}
 _FONTS: dict[tuple, ImageFont.FreeTypeFont] = {}
-_EASE = {"linear", "ease-out", "ease-in-out"}
+_EASE = {"linear", "ease-out", "ease-in-out", "exponential"}
 _GRADES = {"none", "sepia", "paper"}
 _TRANSITIONS = {"cut", "dissolve", "zoom"}
 _OVERLAYS = {"text", "highlighter", "circle", "arrow"}
@@ -77,19 +77,27 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
 
 
 def camera_metrics(camera: dict, duration: float) -> dict:
-    """Plate rates in design pixels and percent of scale per second."""
+    """Plate rates. Exponential zoom reports the constant relative %/s a measurement sees."""
     duration = max(float(duration), 1e-6)
     start, end = camera["from"], camera["to"]
-    zoom = (end["scale"] - start["scale"]) / duration * 100.0
+    zoom = _zoom_percent(camera, duration)
     pan_x = (end["x"] - start["x"]) / duration
     pan_y = (end["y"] - start["y"]) / duration
     moving = abs(zoom) >= 0.4 or math.hypot(pan_x, pan_y) >= 6.0
     return {
         "ease": camera["ease"],
+        "duration": round(duration, 4),
         "zoom_pct_per_s": round(zoom, 4),
         "pan_px_per_s": {"x": round(pan_x, 3), "y": round(pan_y, 3)},
         "static": not moving,
     }
+
+
+def _zoom_percent(camera: dict, duration: float) -> float:
+    start, end = camera["from"]["scale"], camera["to"]["scale"]
+    if camera.get("ease") == "exponential" and start > 0 and end > 0 and start != end:
+        return math.log(end / start) / duration * 100.0
+    return (end - start) / duration * 100.0
 
 
 def overlay_start(overlay: dict, vo: str, duration: float, style: str) -> float:
@@ -127,7 +135,10 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
         scale = 1.0 + (cam[0] - 1.0) * gain
         ox = cam[1] * gain * theme.fit.scale
         oy = cam[2] * gain * theme.fit.scale
-        _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy)
+        span = params["camera"]
+        margin_x = max(abs(span["from"]["x"]), abs(span["to"]["x"])) * gain * theme.fit.scale
+        margin_y = max(abs(span["from"]["y"]), abs(span["to"]["y"])) * gain * theme.fit.scale
+        _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy, margin_x, margin_y)
     plate = _grade(plate, params["grade"])
     plate = _paper(plate, params["paper"], int(u * 30) + 3)
     plate = _grain(plate, params["grain"], u)
@@ -167,10 +178,17 @@ def _content_box(theme) -> tuple[int, int, int, int]:
 
 
 def _camera_at(camera, u, duration):
-    p = _apply_ease(camera["ease"], 0.0 if duration <= 0 else u / duration)
+    t = 0.0 if duration <= 0 else cl(u / duration)
     a, b = camera["from"], camera["to"]
+    if camera.get("ease") == "exponential" and a["scale"] > 0 and b["scale"] > 0:
+        # Constant relative rate: scale(t) = s0 * (s1/s0)^t. Linear scale reads ~0.7–0.85× this.
+        scale = a["scale"] * (b["scale"] / a["scale"]) ** t
+        p = t
+    else:
+        p = _apply_ease(camera["ease"], t)
+        scale = a["scale"] + (b["scale"] - a["scale"]) * p
     return (
-        a["scale"] + (b["scale"] - a["scale"]) * p,
+        scale,
         a["x"] + (b["x"] - a["x"]) * p,
         a["y"] + (b["y"] - a["y"]) * p,
     )
@@ -202,20 +220,28 @@ def _load(path: Path) -> Image.Image:
     return image
 
 
-def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: float) -> None:
+def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: float,
+          margin_x: float = 0, margin_y: float = 0) -> None:
     ch, cw = plate.shape[:2]
     scale = max(1.0, float(scale))
-    need_w = cw + 2 * abs(ox) + 4
-    need_h = ch + 2 * abs(oy) + 4
-    cover = max(need_w / image.width, need_h / image.height, (cw / image.width) * scale, (ch / image.height) * scale)
-    sw = max(1, int(round(image.width * cover)))
-    sh = max(1, int(round(image.height * cover)))
+    base = max(cw / max(1, image.width), ch / max(1, image.height))
+    # Reserve the shot's full pan even when this frame's zoom is 1. The reserve
+    # does not grow with the current offset, so the picture actually travels.
+    need_x = 1.0 + (2.0 * margin_x / cw if cw else 0.0)
+    need_y = 1.0 + (2.0 * margin_y / ch if ch else 0.0)
+    draw = base * max(scale, need_x, need_y)
+    sw = max(cw + 2, int(math.ceil(image.width * draw)))
+    sh = max(ch + 2, int(math.ceil(image.height * draw)))
     resized = image.resize((sw, sh), Image.Resampling.BILINEAR)
     left = int(round((sw - cw) / 2 - ox))
     top = int(round((sh - ch) / 2 - oy))
     left = min(max(0, left), max(0, sw - cw))
     top = min(max(0, top), max(0, sh - ch))
-    crop = resized.crop((left, top, left + cw, top + ch))
+    crop = resized.crop((left, top, min(sw, left + cw), min(sh, top + ch)))
+    if crop.size != (cw, ch):
+        fitted = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        fitted.paste(crop, (0, 0))
+        crop = fitted
     src = np.asarray(crop, np.float32)
     alpha = src[:, :, 3:4] / 255.0
     plate[:] = plate * (1.0 - alpha) + src[:, :, :3] * alpha
@@ -226,11 +252,10 @@ def _grade(plate: np.ndarray, grade: str) -> np.ndarray:
         return plate
     r, g, b = plate[:, :, 0], plate[:, :, 1], plate[:, :, 2]
     if grade == "sepia":
-        # Two poles measured on ref3: shadow #261c15, highlight #d3c0aa.
-        # Luminance remaps between them. The old matrix lifted whites to #faedb4.
+        # Round 2 poles: darker shadow #1a1411, warmer highlight #ead0b3.
         luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
-        shadow = np.array([0x26, 0x1C, 0x15], np.float32)
-        highlight = np.array([0xD3, 0xC0, 0xAA], np.float32)
+        shadow = np.array([0x1A, 0x14, 0x11], np.float32)
+        highlight = np.array([0xEA, 0xD0, 0xB3], np.float32)
         return shadow + (highlight - shadow) * luma[..., None]
     y = 0.2126 * r + 0.7152 * g + 0.0722 * b
     # Measured ref2 paper poles are about #131313 and #dadada.
@@ -314,30 +339,62 @@ def _draw_text(layer, item, u, start, theme, x0, y0):
         appear *= 1.0 - cl((local - hold) / 0.25)
     if appear <= 0:
         return
-    size = max(8, int(round(item["size"] * theme.fit.scale)))
-    font = _font(item["font"], size, theme.fonts())
-    text = item["text"]
-    pen = ImageDraw.Draw(layer)
-    bbox = pen.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    lines = [word for word in item["text"].split(" ") if word] or [item["text"]]
     anchor = _map(theme, item["x"], item["y"], x0, y0)
     slide = 0.0
     if item["entrance"] == "slide":
         slide = (1.0 - appear) * 36 * theme.fit.scale
-    scale = 1.0
+    pop = 1.0
     if item["entrance"] == "pop":
-        # Short overshoot. Opt-in preset only; the house show does not use it.
         p = cl(local / 0.20)
-        scale = 0.86 + 0.22 * eo(p)
+        pop = 0.86 + 0.22 * eo(p)
         if p > 0.7:
-            scale = 1.0 + (scale - 1.0) * (1.0 - cl((p - 0.7) / 0.3))
-    chip = Image.new("RGBA", (max(1, tw + 8), max(1, th + 8)), (0, 0, 0, 0))
-    ImageDraw.Draw(chip).text((4 - bbox[0], 4 - bbox[1]), text, font=font, fill=(*item["color"], int(appear * 255)))
-    if abs(scale - 1.0) > 0.02:
-        chip = chip.resize((max(1, int(chip.width * scale)), max(1, int(chip.height * scale))), Image.Resampling.BILINEAR)
+            pop = 1.0 + (pop - 1.0) * (1.0 - cl((p - 0.7) / 0.3))
+    chip, left, top = _stack_text(layer.size, lines, item, theme, anchor, slide, pop, int(appear * 255))
+    _stamp(layer, chip, left, top)
+
+
+def _stack_text(frame_size, lines, item, theme, anchor, slide, pop, alpha):
+    """One word per line, shrunk until the block sits inside the frame."""
+    width, height = frame_size
+    margin = max(8, int(round(48 * theme.fit.scale)))
+    safe_w = max(16, width - 2 * margin)
+    safe_h = max(16, height - 2 * margin)
+    size_px = max(8, int(round(item["size"] * theme.fit.scale)))
+    font = _font(item["font"], size_px, theme.fonts())
+    gap = 0
+    blocks = []
+    for _ in range(24):
+        font = _font(item["font"], size_px, theme.fonts())
+        pen = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        blocks = []
+        for line in lines:
+            box = pen.textbbox((0, 0), line, font=font)
+            blocks.append((line, box[2] - box[0], box[3] - box[1], box))
+        gap = max(0, int(round(size_px * 0.12)))
+        block_w = max(block[1] for block in blocks)
+        block_h = sum(block[2] for block in blocks) + gap * (len(blocks) - 1)
+        if block_w <= safe_w and block_h <= safe_h:
+            break
+        size_px = max(8, int(size_px * 0.9))
+        if size_px == 8:
+            break
+    block_w = max(block[1] for block in blocks) + 8
+    block_h = sum(block[2] for block in blocks) + gap * (len(blocks) - 1) + 8
+    chip = Image.new("RGBA", (max(1, block_w), max(1, block_h)), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(chip)
+    y = 4
+    for line, tw, th, box in blocks:
+        x = 4 + (block_w - 8 - tw) / 2
+        pen.text((x - box[0], y - box[1]), line, font=font, fill=(*item["color"], alpha))
+        y += th + gap
+    if abs(pop - 1.0) > 0.02:
+        chip = chip.resize((max(1, int(chip.width * pop)), max(1, int(chip.height * pop))), Image.Resampling.BILINEAR)
     left = int(round(anchor[0] - chip.width / 2 + slide))
     top = int(round(anchor[1] - chip.height / 2))
-    _stamp(layer, chip, left, top)
+    left = min(max(margin, left), max(margin, width - margin - chip.width))
+    top = min(max(margin, top), max(margin, height - margin - chip.height))
+    return chip, left, top
 
 
 def _stamp(base: Image.Image, chip: Image.Image, left: int, top: int) -> None:
@@ -415,17 +472,22 @@ def _camera(raw, index: int, rules: dict) -> dict:
         raise EpisodeError(f"scene {index}: camera must be a mapping")
     ease = raw.get("ease", rules["default_ease"])
     if ease not in _EASE:
-        raise EpisodeError(f"scene {index}: camera.ease must be linear, ease-out, or ease-in-out")
-    return {"ease": ease, "from": _point(raw.get("from") or {}, index, "from"), "to": _point(raw.get("to") or {}, index, "to")}
+        raise EpisodeError(f"scene {index}: camera.ease must be linear, ease-out, ease-in-out, or exponential")
+    limit = float(rules.get("scale_max", 1.45))
+    return {
+        "ease": ease,
+        "from": _point(raw.get("from") or {}, index, "from", limit),
+        "to": _point(raw.get("to") or {}, index, "to", limit),
+    }
 
 
-def _point(raw, index: int, name: str) -> dict:
+def _point(raw, index: int, name: str, scale_max: float = 2.4) -> dict:
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index}: camera.{name} must be a mapping")
     scale = raw.get("scale", 1.0)
     x = raw.get("x", 0.0)
     y = raw.get("y", 0.0)
-    for label, value, lo, hi in (("scale", scale, 1.0, 1.45), ("x", x, -400, 400), ("y", y, -700, 700)):
+    for label, value, lo, hi in (("scale", scale, 1.0, scale_max), ("x", x, -400, 400), ("y", y, -700, 700)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not lo <= float(value) <= hi:
             raise EpisodeError(f"scene {index}: camera.{name}.{label} must be from {lo} to {hi}")
     return {"scale": float(scale), "x": float(x), "y": float(y)}

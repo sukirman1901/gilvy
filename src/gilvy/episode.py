@@ -22,7 +22,7 @@ _VOICES = {
     "en-US": "en-US-AndrewNeural",
     "id-ID": "id-ID-ArdiNeural",
 }
-_RESERVED = {"type", "caption", "text", "key", "vo", "min", "entry", "green", "id"}
+_RESERVED = {"type", "caption", "text", "key", "vo", "min", "entry", "green", "id", "vo_overrun"}
 _GREEN = {"none", "focus", "any"}
 _INTS = {"count", "count_from", "total", "highlight", "index"}
 
@@ -38,6 +38,7 @@ class Scene:
     entry: str | None = None
     green: str | None = None
     id: str | None = None
+    vo_overrun: bool = False
     impl: object | None = field(default=None, repr=False, compare=False)
 
     @property
@@ -69,6 +70,10 @@ class Episode:
     format: str = "vertical_9x16"
     audio_mode: str = "voiceover"
     style: str = HOUSE
+    vo_overrun: bool = False
+    music: str | None = None
+    loudness: float | None = None
+    spoken_seconds: list[float] | None = None
 
     def with_format(self, name: str) -> Episode:
         get_profile(name)
@@ -122,7 +127,7 @@ def _keys(raw, lines: list[str], index: int) -> list[str]:
     return list(raw)
 
 
-def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE) -> Scene:
+def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE, vo_overrun: bool = False) -> Scene:
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index} must be a mapping")
     typ = raw.get("type")
@@ -183,7 +188,10 @@ def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE) -
     ident = raw.get("id")
     if ident is not None and not isinstance(ident, str):
         raise EpisodeError(f"scene {index}: id must be a string")
-    return Scene(typ, caption, keys, vo, minimum, params, entry if isinstance(entry, str) else None, green, ident)
+    overrun = raw.get("vo_overrun", vo_overrun)
+    if not isinstance(overrun, bool):
+        raise EpisodeError(f"scene {index}: vo_overrun must be true or false")
+    return Scene(typ, caption, keys, vo, minimum, params, entry if isinstance(entry, str) else None, green, ident, overrun)
 
 
 def load_episode(path: str | Path) -> Episode:
@@ -218,7 +226,10 @@ def load_episode(path: str | Path) -> Episode:
     raw_scenes = data.get("scenes")
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise EpisodeError("scenes must be a non-empty list")
-    scenes = [_scene(item, i + 1, audio_mode, style) for i, item in enumerate(raw_scenes)]
+    episode_overrun = data.get("vo_overrun", False)
+    if not isinstance(episode_overrun, bool):
+        raise EpisodeError("vo_overrun must be true or false")
+    scenes = [_scene(item, i + 1, audio_mode, style, episode_overrun) for i, item in enumerate(raw_scenes)]
     poster = data.get("poster")
     if poster is not None:
         if isinstance(poster, bool) or not isinstance(poster, int) or not 0 <= poster < len(scenes):
@@ -245,6 +256,26 @@ def load_episode(path: str | Path) -> Episode:
     output = data.get("output")
     if output is not None and not isinstance(output, str):
         raise EpisodeError("output must be a file path")
+    music = data.get("music")
+    if music is not None:
+        if not isinstance(music, str) or not music.strip():
+            raise EpisodeError("music must be a path to an audio file")
+        music_path = Path(music)
+        if not music_path.is_absolute():
+            music_path = source.parent / music_path
+        if not music_path.is_file():
+            raise EpisodeError(f"music not found: {music_path}")
+        music = str(music_path.resolve())
+    if "loudness" in data:
+        loudness = data.get("loudness")
+        if loudness is not None:
+            if isinstance(loudness, bool) or not isinstance(loudness, (int, float)) or not math.isfinite(loudness):
+                raise EpisodeError("loudness must be a LUFS number, for example -21")
+            if not -40 <= float(loudness) <= -5:
+                raise EpisodeError("loudness must be between -40 and -5 LUFS")
+            loudness = float(loudness)
+    else:
+        loudness = RULES.get(style, {}).get("loudness")
     delivery = str(data.get("format") or "vertical_9x16")
     try:
         get_profile(delivery)
@@ -267,6 +298,9 @@ def load_episode(path: str | Path) -> Episode:
         format=delivery,
         audio_mode=audio_mode,
         style=style,
+        vo_overrun=episode_overrun,
+        music=music,
+        loudness=loudness,
     )
 
 

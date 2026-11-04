@@ -152,9 +152,12 @@ style frames from the video. When a PNG is already there it compares brightness,
 contrast, and colour and adds a regen hint on a miss. Render fails if a path is
 missing. Generate the art outside the repo. Do not commit frames from the
 reference. Samples under `examples/styles/` use procedural stand-in plates.
-MCP `asset_manifest` takes the same optional reference. `history-story` uses
-pad/lead 0, a 0.15 s text fade, 216 px emphasis type, and a two-pole sepia
-(`#261c15` to `#d3c0aa`). edge-tts is pinned to 7.3.1.
+MCP `asset_manifest` takes the same optional reference. `history-story` uses pad/lead 0, no intro fade, exponential zoom up to about
+26%/s, stacked emphasis type, and sepia from `#1a1411` to `#ead0b3`. Optional
+`music` is ducked under the voice and normalized to the preset loudness
+(`-21` LUFS). `vo_overrun: true` lets a long line play into the next shot;
+otherwise QC warns that later cuts moved. `gilvy compare` rescales mismatched
+frames and accepts a window longer than 12 seconds. edge-tts is pinned to 7.3.1.
 
 ## Opt-in product motion
 

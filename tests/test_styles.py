@@ -206,11 +206,11 @@ def test_preset_qc_rejects_a_static_or_overspeed_plate():
             "camera": {"static": True, "zoom_pct_per_s": 0, "pan_px_per_s": {"x": 0, "y": 0}},
         }, {
             "index": 1, "id": "rush", "type": "image", "duration": 2.0,
-            "camera": {"static": False, "zoom_pct_per_s": 22.0, "pan_px_per_s": {"x": 0, "y": 0}},
+            "camera": {"static": False, "zoom_pct_per_s": 48.0, "pan_px_per_s": {"x": 0, "y": 0}, "duration": 4.0},
         }],
     })
     assert any("static" in item for item in report.violations)
-    assert any("22.00%/s" in item for item in report.violations)
+    assert any("48.00%/s" in item for item in report.violations)
     house = QCReport(ok=True, video="x", duration=3, width=1080, height=1920)
     _preset_conformance(house, {"style": "house", "scenes": [{"type": "image", "duration": 0.2, "index": 0, "id": "a"}]})
     assert house.violations == []

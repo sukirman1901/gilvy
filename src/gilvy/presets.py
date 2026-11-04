@@ -42,12 +42,16 @@ RULES = {
     HISTORY: {
         "shot_min": 1.10,
         "shot_max": 7.00,
+        # Reference pushes on the Lustig short run about 7.7–24%/s, including short punches.
         "zoom_lo": 0.80,
-        "zoom_hi": 6.00,
+        "zoom_hi": 26.0,
         "pull_lo": 0.80,
-        "pull_hi": 16.0,
+        "pull_hi": 26.0,
+        "punch_zoom_hi": 40.0,
+        "punch_max_s": 1.5,
+        "scale_max": 2.4,
         "pan_min": 8.0,
-        "default_ease": "linear",
+        "default_ease": "exponential",
         "default_grade": "sepia",
         "default_grain": 0.22,
         "default_transition": "dissolve",
@@ -60,6 +64,8 @@ RULES = {
         # House pad+lead adds 0.6s per scene. That turned a 31.9s voice cut into 35.6s.
         "pad": 0.0,
         "lead": 0.0,
+        "intro": 0.0,
+        "loudness": -21.0,
         "skip_green": True,
     },
 }
@@ -77,11 +83,23 @@ STYLE_PROMPTS = {
 }
 
 
-def zoom_in_band(rate: float, rules: dict) -> bool:
+def _band(rules: dict, duration: float | None) -> tuple[float, float, float, float]:
+    """Push/pull limits. A shot at or under punch_max_s may go faster."""
+    push_hi = float(rules["zoom_hi"])
+    pull_hi = float(rules["pull_hi"])
+    if duration is not None and duration <= float(rules.get("punch_max_s", 1.5)):
+        punch = float(rules.get("punch_zoom_hi", push_hi))
+        push_hi = max(push_hi, punch)
+        pull_hi = max(pull_hi, punch)
+    return float(rules["zoom_lo"]), push_hi, float(rules["pull_lo"]), pull_hi
+
+
+def zoom_in_band(rate: float, rules: dict, duration: float | None = None) -> bool:
     """True when a signed percent-per-second rate matches the preset's plate band."""
+    push_lo, push_hi, pull_lo, pull_hi = _band(rules, duration)
     if rate >= 0:
-        return rules["zoom_lo"] <= rate <= rules["zoom_hi"]
-    return rules["pull_lo"] <= abs(rate) <= rules["pull_hi"]
+        return push_lo <= rate <= push_hi
+    return pull_lo <= abs(rate) <= pull_hi
 
 
 def camera_problem(metrics: dict, rules: dict, label: str) -> str | None:
@@ -91,12 +109,14 @@ def camera_problem(metrics: dict, rules: dict, label: str) -> str | None:
     zoom = float(metrics["zoom_pct_per_s"])
     pan = metrics["pan_px_per_s"]
     speed = (float(pan["x"]) ** 2 + float(pan["y"]) ** 2) ** 0.5
-    if abs(zoom) >= 0.4 and not zoom_in_band(zoom, rules):
+    duration = metrics.get("duration")
+    push_lo, push_hi, pull_lo, pull_hi = _band(rules, None if duration is None else float(duration))
+    if abs(zoom) >= 0.4 and not zoom_in_band(zoom, rules, None if duration is None else float(duration)):
         return (
             f"{label} zoom {zoom:.2f}%/s is outside the plate band "
-            f"(push {rules['zoom_lo']:.2f}–{rules['zoom_hi']:.2f}%/s, "
-            f"pull {rules['pull_lo']:.2f}–{rules['pull_hi']:.2f}%/s). "
-            "A punch zoom belongs on transition_out: zoom, not on the plate."
+            f"(push {push_lo:.2f}–{push_hi:.2f}%/s, "
+            f"pull {pull_lo:.2f}–{pull_hi:.2f}%/s). "
+            "A short punch may go faster; a longer plate stays in the main band."
         )
     if abs(zoom) < 0.4 and speed < rules["pan_min"]:
         return (

@@ -19,6 +19,21 @@ from gilvy.errors import GilvyError
 from gilvy.presets import PHOTO_PRESETS, RULES, camera_problem
 
 
+def _vo_warnings(report: QCReport, meta: dict) -> None:
+    """A longer line used to stretch the shot and shove every later cut. Say so."""
+    if meta.get("vo_overrun"):
+        return
+    for scene in meta.get("scenes") or []:
+        if not scene.get("vo_extends_shot"):
+            continue
+        label = f"scene {int(scene.get('index', 0)) + 1} ({scene.get('id') or scene.get('type')})"
+        report.warnings.append(
+            f"{label} voice is {float(scene.get('vo_seconds', 0)):.2f}s, longer than the "
+            f"{float(scene.get('shot_min', 0)):.2f}s shot, so later cuts move later. "
+            "Set vo_overrun: true to let the line play into the next shot."
+        )
+
+
 def checks_green(style: str | None) -> bool:
     """Sepia grades trip the green mask. Those styles skip the tint check."""
     return not bool(RULES.get(style or "", {}).get("skip_green"))
@@ -48,6 +63,7 @@ class QCReport:
     blank_times: list[float] = field(default_factory=list)
     dark_times: list[float] = field(default_factory=list)
     silence_gaps: list[dict] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     audio_mode: str = "voiceover"
 
     def to_dict(self) -> dict:
@@ -66,6 +82,7 @@ class QCReport:
             "blank_times": [round(t, 2) for t in self.blank_times[:12]],
             "dark_times": [round(t, 2) for t in self.dark_times[:12]],
             "silence_gaps": self.silence_gaps,
+            "warnings": self.warnings,
         }
 
     def text(self) -> str:
@@ -84,6 +101,8 @@ class QCReport:
             lines.append("  silence gaps: none")
         lines.append(f"  blank frames: {len(self.blank_times)}")
         lines.append(f"  dark frames: {len(self.dark_times)}")
+        for item in self.warnings:
+            lines.append(f"warning: {item}")
         for item in self.violations:
             lines.append(f"- {item}")
         return "\n".join(lines)
@@ -390,6 +409,7 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
             if is_blank(frame):
                 report.violations.append(f"{label} is blank at {t:.2f}s, when the scene should be readable")
         _preset_conformance(report, meta)
+        _vo_warnings(report, meta)
 
     # The scan can record the same overflow at several timestamps. Keep the first of each wording.
     deduped = []
