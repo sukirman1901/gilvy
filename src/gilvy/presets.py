@@ -31,10 +31,16 @@ RULES = {
         "default_transition": "cut",
         "default_transition_s": 0.0,
         "text_entrance": "pop",
+        "text_fade_s": 0.16,
+        "text_size": 72,
         "keyword_lead": -0.10,
+        # House breath. Vox has not had a timing pass; history has.
+        "pad": 0.4,
+        "lead": 0.2,
+        "skip_green": False,
     },
     HISTORY: {
-        "shot_min": 1.60,
+        "shot_min": 1.10,
         "shot_max": 7.00,
         "zoom_lo": 0.80,
         "zoom_hi": 6.00,
@@ -47,7 +53,14 @@ RULES = {
         "default_transition": "dissolve",
         "default_transition_s": 0.40,
         "text_entrance": "fade",
+        "text_fade_s": 0.15,
+        # 3× the old 72px default. The Lustig pass still read about 9× under the reference.
+        "text_size": 216,
         "keyword_lead": 0.15,
+        # House pad+lead adds 0.6s per scene. That turned a 31.9s voice cut into 35.6s.
+        "pad": 0.0,
+        "lead": 0.0,
+        "skip_green": True,
     },
 }
 
@@ -58,8 +71,8 @@ STYLE_PROMPTS = {
         "transparent background."
     ),
     HISTORY: (
-        "Vertical 9:16 painterly story still, warm sepia and brown, visible canvas grain, "
-        "soft directional light, early twentieth century, no letters, no watermark, no logo."
+        "Archival photo, sepia, grain, vignette, vertical 9:16 framing. "
+        "No letters, no watermark, no logo."
     ),
 }
 

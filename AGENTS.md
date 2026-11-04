@@ -55,6 +55,8 @@ Visual components: `gilvy elements` / `list_visual_elements`. Read `gilvy motion
 
 MCP tools: `list_visual_elements`, `motion_reference`, `reference_styles`, `asset_manifest`, `render_video`, `preview_frames`, `preview_motion`, `compare_versions`, `qc_report`, `directing_notes`, `list_scene_types`. Config samples live in `examples/mcp/` and `opencode.json`.
 
-For a Vox or sepia-history match: `download-reference`, then `analyze-reference` (hard cuts plus `soft_transitions` dissolve candidates), pick `vox-explainer` or `history-story`, `assets` for the plate list and prompts, generate those PNGs, then `render` and `qc`. Do not commit reference frames. House rules above stay in force for every episode that is not one of those two styles.
+For a Vox or sepia-history match: `download-reference`, then `analyze-reference` (hard cuts plus `soft_transitions` dissolve candidates), pick `vox-explainer` or `history-story`, `assets --reference <video>` for the plate list, overscan size, fixed prompt template, and style frames. Generate those PNGs. `assets` then flags a plate whose brightness, contrast, or colour misses the frames and prints a regen hint. Then `render` and `qc`. Do not commit reference frames. House rules above stay in force for every episode that is not one of those two styles.
+
+`history-story` voice timing is not the house 0.6 s breath: pad and lead are 0, and edge-tts clips lose their leading and trailing silence. That is what kept a 31.9 s reference from rendering at 35.6 s. Shot minimum is 1.1 s. Emphasis text fades in 0.15 s at 216 px, and sepia runs from `#261c15` to `#d3c0aa`. Green-tint QC is off for that style.
 
 The color rule with the original measured ratios is `docs/color-rule.md`.

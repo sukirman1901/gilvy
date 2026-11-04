@@ -1,4 +1,4 @@
-"""Voice-over. Scene length is max(min, spoken duration + 0.6s)."""
+"""Voice-over. House scenes add a 0.6s breath; a preset can set its own pad and lead."""
 
 from __future__ import annotations
 
@@ -13,6 +13,39 @@ from gilvy.errors import GilvyError
 def probe_ok(path: Path) -> bool:
     run = subprocess.run(["ffprobe", "-v", "error", str(path)], capture_output=True)
     return run.returncode == 0 and path.stat().st_size > 2000
+
+
+def trim_edge_silence(path: Path) -> Path:
+    """Drop leading and trailing silence. Internal pauses stay.
+
+    edge-tts pads each clip. On a history-story voice cut that padding, plus the
+    house 0.6s breath, stretched a 31.9s reference to 35.6s. A failed trim keeps
+    the original file.
+    """
+    dest = path.with_name(path.stem + ".trim" + path.suffix)
+    audio_filter = (
+        "silenceremove=start_periods=1:start_threshold=0.015:start_silence=0:detection=peak,"
+        "areverse,"
+        "silenceremove=start_periods=1:start_threshold=0.015:start_silence=0:detection=peak,"
+        "areverse"
+    )
+    run = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-af", audio_filter, str(dest)],
+        capture_output=True,
+        text=True,
+    )
+    if run.returncode != 0 or not dest.exists() or dest.stat().st_size < 200:
+        dest.unlink(missing_ok=True)
+        return path
+    try:
+        if probe_duration(dest) < 0.05:
+            dest.unlink(missing_ok=True)
+            return path
+    except GilvyError:
+        dest.unlink(missing_ok=True)
+        return path
+    dest.replace(path)
+    return path
 
 
 def probe_duration(path: Path) -> float:
@@ -98,7 +131,7 @@ class EdgeTTS:
                 time.sleep(3)
                 continue
             if dest.exists() and probe_ok(dest):
-                return dest
+                return trim_edge_silence(dest)
             time.sleep(3)
         raise GilvyError(f"edge-tts failed for {voice}: {last}")
 
@@ -114,4 +147,4 @@ def backend_for(name: str):
 def stamp_for(backend: str, voice: str, rate: str, text: str, scene_min: float) -> str:
     if backend == "fixture":
         return f"fixture\n{scene_min}\n{text}"
-    return f"edge\n{voice}\n{rate}\n{text}"
+    return f"edge\n{voice}\n{rate}\ntrim1\n{text}"

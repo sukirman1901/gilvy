@@ -329,7 +329,7 @@ House episodes stay on the directing notes above. To match a Vox explainer or a 
 1. `gilvy download-reference <url> --out <new dir>` when the source is a link, then `gilvy analyze-reference <video> --out <new dir>`.
 2. Read `soft_transitions` as dissolve candidates. Watch every clip. Pass `--boundaries` only after you agree the join is real.
 3. Pick `style: vox-explainer` or `style: history-story`. The numbers, tags (measured, observed, inferred, uncertain), and gaps are in `gilvy reference-styles` / MCP `reference_styles`.
-4. `gilvy assets episode.yaml`. Generate every missing PNG from its prompt. Do not commit reference frames.
+4. `gilvy assets episode.yaml --reference <video>`. The manifest carries the fixed prompt template (history-story: archival photo, sepia, grain, vignette, framing), an overscan pixel size, and style frames. Generate every missing PNG from that prompt. Run `assets` again; a colour, contrast, or brightness miss includes a regen hint. Do not commit reference frames.
 5. Preview, watch a short motion proof, `gilvy render`, then `gilvy qc`. Image plates must sit in the preset's shot-length and zoom band, and they must move.
 
 Samples: `examples/styles/vox-explainer.yaml`, `examples/styles/history-story.yaml`. Their plates are procedural stand-ins.

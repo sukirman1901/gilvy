@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from gilvy.assets import build_manifest
+from gilvy.assets import build_manifest, extract_style_refs
 from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.formats import get_profile
@@ -236,6 +236,8 @@ def run(argv: list[str] | None = None) -> int:
     sub.add_parser("reference-styles", help="measured vox-explainer and history-story directing guide")
     assets = sub.add_parser("assets", help="list image plates an episode must generate before render")
     assets.add_argument("episode")
+    assets.add_argument("--reference", help="local video; extract style reference frames and QC plates against them")
+    assets.add_argument("--refs-out", help="directory for style frames (default: <episode>/style-refs)")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
@@ -286,7 +288,12 @@ def run(argv: list[str] | None = None) -> int:
             print(Path(__file__).resolve().parent.joinpath("REFERENCE_STYLES.md").read_text(encoding="utf-8"))
             return 0
         if args.command == "assets":
-            print(json.dumps(build_manifest(load_episode(args.episode)), indent=2))
+            episode = load_episode(args.episode)
+            refs = None
+            if args.reference:
+                dest = Path(args.refs_out).expanduser() if args.refs_out else episode.source_dir / "style-refs"
+                refs = extract_style_refs(args.reference, dest)
+            print(json.dumps(build_manifest(episode, refs), indent=2))
             return 0
         if args.command == "new":
             return _cmd_new(args.name)

@@ -18,6 +18,11 @@ import numpy as np
 from gilvy.errors import GilvyError
 from gilvy.presets import PHOTO_PRESETS, RULES, camera_problem
 
+
+def checks_green(style: str | None) -> bool:
+    """Sepia grades trip the green mask. Those styles skip the tint check."""
+    return not bool(RULES.get(style or "", {}).get("skip_green"))
+
 MAX_GREEN = 0.40
 MAX_NONE_GREEN = 0.012
 MIN_FOCUS_GREEN = 0.004
@@ -280,6 +285,7 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
     duration = float((probed.get("format") or {}).get("duration") or 0)
     report = QCReport(ok=True, video=str(video), duration=duration, width=width, height=height)
     meta = _load_timeline(video, timeline)
+    check_green = checks_green((meta or {}).get("style"))
 
     mode = audio_mode or (meta or {}).get("audio_mode", "voiceover")
     if mode not in {"voiceover", "ambient", "silent"}:
@@ -330,7 +336,7 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
             index += 1
             ratio = green_ratio(frame)
             report.green_ratio_max = max(report.green_ratio_max, ratio)
-            if ratio > MAX_GREEN:
+            if check_green and ratio > MAX_GREEN:
                 report.violations.append(f"green ratio {ratio * 100:.1f}% at {t:.2f}s exceeds {MAX_GREEN * 100:.0f}%")
             in_fade = t < HEAD_SKIP or t > duration - TAIL_SKIP
             readable = (not in_fade) and _scene_body(t, meta)
@@ -371,15 +377,15 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
             report.scenes.append(row)
             report.green_ratio_max = max(report.green_ratio_max, ratio)
             label = f"scene {row['index'] + 1} ({row['id']})"
-            if ratio > MAX_GREEN:
+            if check_green and ratio > MAX_GREEN:
                 report.violations.append(f"{label} green ratio {ratio * 100:.1f}% exceeds {MAX_GREEN * 100:.0f}%")
-            if role == "none" and ratio > MAX_NONE_GREEN:
+            if check_green and role == "none" and ratio > MAX_NONE_GREEN:
                 report.violations.append(
                     f"{label} should have no green (structure stays white) but green is {ratio * 100:.1f}%"
                 )
-            if role == "focus" and ratio < MIN_FOCUS_GREEN:
+            if check_green and role == "focus" and ratio < MIN_FOCUS_GREEN:
                 report.violations.append(f"{label} is missing its one green focus ({ratio * 100:.1f}%)")
-            if not _caption_allows_green(scene) and caption_green_ratio(frame) > MAX_CAPTION_GREEN:
+            if check_green and not _caption_allows_green(scene) and caption_green_ratio(frame) > MAX_CAPTION_GREEN:
                 report.violations.append(f"{label} has green in the caption. Key words stay white.")
             if is_blank(frame):
                 report.violations.append(f"{label} is blank at {t:.2f}s, when the scene should be readable")
