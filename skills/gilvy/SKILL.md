@@ -174,6 +174,12 @@ Technical QC checks the output's integrity and style constraints. It does not as
 ## 7. Then the usual production pass
 
 Choose audio mode first: `voiceover` (default), `ambient`, or `silent`. For voiceover, write the spoken line before the caption and time against the actual voice. For ambient/silent, set explicit scene `min` durations for reading; TTS is not called. Keep captions under five words per line, keys copied exactly, inspect stills, watch the motion proof, render, then run technical QC. Diagnose the reported failure; fix episode inputs or custom scene logic as appropriate, rather than changing the locked drawing engine.
+
+## 8. Opt-in photo presets
+
+The sections above are the house explainer. The camera stays still, and the picture is drawn.
+
+`style: vox-explainer` and `style: history-story` are opt-in exceptions for photographic and painterly plates. They do not change a house episode. Read `reference_styles` before writing one. Those episodes use `type: image` for Ken Burns, parallax layers, dissolves, grade, and overlays. Do not fake them by zooming a house scene.
 <!-- directing:end -->
 
 ## Creative references and examples
@@ -314,7 +320,19 @@ ffmpeg must be on `PATH`. Poppins ships inside the package (OFL). Do not point f
 
 ## Agents
 
-- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `directing_notes`, `list_scene_types`, `list_visual_elements`, `motion_reference`, `preview_frames`, `preview_motion`, `compare_versions`, `render_video`, `qc_report`.
+- **opencode.** `opencode.json` at the repo root starts `gilvy mcp`. Install the package in that environment first (`pip install -e .`). Tools: `directing_notes`, `list_scene_types`, `list_visual_elements`, `motion_reference`, `reference_styles`, `asset_manifest`, `preview_frames`, `preview_motion`, `compare_versions`, `render_video`, `qc_report`, `analyze_reference`, `download_reference`.
+
+## Reference presets
+
+House episodes stay on the directing notes above. To match a Vox explainer or a sepia history short, use the opt-in path and do not zoom a house scene:
+
+1. `gilvy download-reference <url> --out <new dir>` when the source is a link, then `gilvy analyze-reference <video> --out <new dir>`.
+2. Read `soft_transitions` as dissolve candidates. Watch every clip. Pass `--boundaries` only after you agree the join is real.
+3. Pick `style: vox-explainer` or `style: history-story`. The numbers, tags (measured, observed, inferred, uncertain), and gaps are in `gilvy reference-styles` / MCP `reference_styles`.
+4. `gilvy assets episode.yaml`. Generate every missing PNG from its prompt. Do not commit reference frames.
+5. Preview, watch a short motion proof, `gilvy render`, then `gilvy qc`. Image plates must sit in the preset's shot-length and zoom band, and they must move.
+
+Samples: `examples/styles/vox-explainer.yaml`, `examples/styles/history-story.yaml`. Their plates are procedural stand-ins.
 - **Claude Code.** `.mcp.json`:
 
 ```json

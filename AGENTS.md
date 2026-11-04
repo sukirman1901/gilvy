@@ -20,7 +20,7 @@ gilvy makes faceless 9:16 explainers. You write a YAML episode. The picture syst
 0. **Intake.** See `skills/gilvy/SKILL.md` → *Intake* and *Delivery profiles*. Default master is **1080×1920 (9:16)**. Reels, TikTok, and Shorts use that same file. Other aspects are derivatives until a format preset exists.
 1. Choose `audio_mode`: `voiceover` (default), `ambient`, or `silent`. Write the line for each scene. Ambient/silent scenes require explicit `min` reading durations and do not call TTS.
 2. Captions: 1–2 lines, ≤5 words, punctuation attached to the word. `key` copies those words exactly.
-3. One scene type from `list_scene_types`. One idea. Green is one quantity or nothing.
+3. One scene type from `list_scene_types`. One idea. Green is one quantity or nothing. House episodes keep a still camera and drawn scenes. `style: vox-explainer` and `style: history-story` are opt-in image-plate exceptions (`src/gilvy/REFERENCE_STYLES.md`); they do not change the house show.
 4. `gilvy preview ep.yaml` and look at the contact sheet.
 5. `gilvy preview ep.yaml` and read `motion.png` (12% entrance, 45% mid-verb, 80% settled).
 6. Render and watch a 5–8 second `gilvy preview-motion ep.yaml` before the full cut. Review meaning, consequence, pace, and phone-size readability. When extending an approved cut, inspect `gilvy compare` evidence at matching resolutions. Then `gilvy render ep.yaml`. Repeat `--format` for another canvas. Default is `vertical_9x16`.
@@ -53,6 +53,8 @@ not apply the house palette or certify fidelity; name unsupported capabilities.
 
 Visual components: `gilvy elements` / `list_visual_elements`. Read `gilvy motion-reference` / `motion_reference` for the API and approved Bojonegoro study. Components are used inside Python scenes; they are not new scene types.
 
-MCP tools: `list_visual_elements`, `motion_reference`, `render_video`, `preview_frames`, `preview_motion`, `compare_versions`, `qc_report`, `directing_notes`, `list_scene_types`. Config samples live in `examples/mcp/` and `opencode.json`.
+MCP tools: `list_visual_elements`, `motion_reference`, `reference_styles`, `asset_manifest`, `render_video`, `preview_frames`, `preview_motion`, `compare_versions`, `qc_report`, `directing_notes`, `list_scene_types`. Config samples live in `examples/mcp/` and `opencode.json`.
+
+For a Vox or sepia-history match: `download-reference`, then `analyze-reference` (hard cuts plus `soft_transitions` dissolve candidates), pick `vox-explainer` or `history-story`, `assets` for the plate list and prompts, generate those PNGs, then `render` and `qc`. Do not commit reference frames. House rules above stay in force for every episode that is not one of those two styles.
 
 The color rule with the original measured ratios is `docs/color-rule.md`.

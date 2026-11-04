@@ -1,0 +1,85 @@
+# Opt-in history-story sample. Plates are procedural stand-ins, not reference frames.
+#   gilvy assets examples/styles/history-story.yaml
+#   gilvy render examples/styles/history-story.yaml --tts fixture
+
+name: history-story-sample
+style: history-story
+audio_mode: silent
+version: 1
+
+scenes:
+  - id: year
+    type: image
+    caption: ["in 1925"]
+    key: ["1925"]
+    min: 2.4
+    prompt: "A framed portrait on a dark wood wall, empty of lettering."
+    image: history/year.png
+    grade: sepia
+    grain: 0.18
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 0}
+      to: {scale: 1.072, x: 0, y: -16}
+    transition_out: dissolve
+    transition: 0.4
+    overlays:
+      - kind: text
+        text: "IN 1925"
+        at: 0.45
+        hold: 1.5
+        entrance: fade
+        font: serif
+        size: 72
+        color: [178, 74, 66]
+        sfx: sting
+
+  - id: papers
+    type: image
+    caption: ["the papers"]
+    key: ["papers"]
+    min: 3.2
+    prompt: "A cork board with blank documents and no readable writing."
+    image: history/board.png
+    grade: sepia
+    grain: 0.2
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 12, y: 8}
+      to: {scale: 1.09, x: -8, y: -10}
+    transition_out: dissolve
+    transition: 0.4
+    overlays:
+      - kind: circle
+        cx: 540
+        cy: 860
+        r: 220
+        at: 0.6
+        duration: 0.9
+        color: [178, 74, 66]
+        width: 10
+        sfx: scribble
+
+  - id: street
+    type: image
+    caption: ["he left"]
+    key: ["left"]
+    min: 2.2
+    prompt: "A lone figure walking away down a sepia street, no lettering."
+    image: history/street.png
+    grade: sepia
+    grain: 0.16
+    camera:
+      ease: linear
+      from: {scale: 1.1, x: 0, y: 20}
+      to: {scale: 1.02, x: 0, y: -8}
+    transition_out: cut
+    overlays:
+      - kind: text
+        text: "HE LEFT"
+        at: 0.35
+        hold: 1.4
+        entrance: fade
+        font: serif
+        size: 68
+        color: [178, 74, 66]

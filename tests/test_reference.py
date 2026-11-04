@@ -9,7 +9,7 @@ from PIL import Image
 from gilvy.cli import run
 from gilvy.errors import GilvyError
 from gilvy.mcp_server import analyze_reference as mcp_analyze
-from gilvy.reference import analyze_reference
+from gilvy.reference import analyze_reference, detect_soft_transitions
 
 
 @pytest.fixture
@@ -81,6 +81,47 @@ def test_cli_mcp_and_local_only_errors(video, tmp_path, capsys):
     assert "scenes" not in result  # compact navigation; details remain in manifest
     assert not json.loads(mcp_analyze("https://example.com/video.mp4", str(tmp_path / "url")))["ok"]
     assert run(["analyze-reference", "/missing.mp4", "--out", str(tmp_path / "missing")]) == 2
+
+
+def test_crossfade_is_a_dissolve_and_a_hard_cut_is_not(tmp_path):
+    fade = tmp_path / "fade.mp4"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=0x8a3030:s=160x120:d=1.6",
+        "-f", "lavfi", "-i", "color=c=0x203060:s=160x120:d=1.6",
+        "-filter_complex", "xfade=transition=fade:duration=0.4:offset=1.2",
+        "-pix_fmt", "yuv420p", str(fade),
+    ], check=True)
+    soft = detect_soft_transitions(fade)
+    assert any(row["kind"] == "dissolve" and row["start"] < 1.4 < row["end"] for row in soft)
+    cut = tmp_path / "cut.mp4"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=black:s=160x120:r=10:d=2",
+        "-vf", "drawbox=color=white:t=fill:enable='gte(t,1)'", "-pix_fmt", "yuv420p", str(cut),
+    ], check=True)
+    assert detect_soft_transitions(cut) == []
+    analyzed = analyze_reference(fade, tmp_path / "fade-study", width=160, min_scene=0.2)
+    assert any(row["kind"] == "dissolve" for row in analyzed["soft_transitions"])
+    assert "dissolve candidate" in Path(analyzed["review"]).read_text(encoding="utf-8")
+
+
+def test_ref3_known_dissolves_are_candidates():
+    """The attached history short. Skipped in CI, where the upload is absent.
+
+    Hard cuts at 3.68 and 5.68 are the scene detector's own joins. The missed
+    content changes are the spread-out blends near 9.0s and 14.5s.
+    """
+    video = Path("/home/ubuntu/.cursor/projects/workspace/uploads/ref3_52fb.mp4")
+    if not video.is_file():
+        pytest.skip("ref3 upload is not in this environment")
+    soft = detect_soft_transitions(video, hard_times=[3.68, 5.68, 23.80, 27.68, 28.80])
+
+    def covers(start, end):
+        return any(not (row["end"] < start or row["start"] > end) for row in soft)
+
+    assert covers(8.8, 10.0)
+    assert covers(14.0, 15.1)
+    assert not any(5.5 <= row["start"] <= 5.85 for row in soft)
 
 
 def test_silent_source_and_decode_failure(tmp_path):

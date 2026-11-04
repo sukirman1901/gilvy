@@ -69,8 +69,10 @@ gilvy analyze-reference reference.mp4 --out out/reference-continuous --boundarie
 ## Outputs
 
 - `reference.json`: source dimensions, duration, average fps, candidate cut
-  timestamps/scores, provisional scene intervals, requested frame timestamps,
-  clip ranges and paths. Review fields start empty, with `not_reviewed` status.
+  timestamps/scores, provisional scene intervals, `soft_transitions` (dissolve
+  candidates; they do not split scenes until you pass `--boundaries`), requested
+  frame timestamps, clip ranges and paths. Review fields start empty, with
+  `not_reviewed` status.
 - `contact-NNN.jpg`: paginated, labelled scene/time thumbnails. Each viewing
   chunk is sampled at 12%, 45% and 80%. These are sampling positions, not a claim
   that the reference has an entrance, action and settled state at those times.

@@ -1,0 +1,105 @@
+# Opt-in vox-explainer sample. Plates are procedural stand-ins, not reference frames.
+#   gilvy assets examples/styles/vox-explainer.yaml
+#   gilvy render examples/styles/vox-explainer.yaml --tts fixture
+
+name: vox-explainer-sample
+style: vox-explainer
+audio_mode: silent
+version: 1
+
+scenes:
+  - id: parallax
+    type: image
+    caption: ["split layers"]
+    key: ["layers"]
+    min: 1.6
+    prompt: "A simple interior photographed as separate depth layers."
+    grade: none
+    grain: 0.04
+    paper: 0
+    layers:
+      - src: vox/bg.png
+        depth: 0.15
+        prompt: "Room background only, no person and no foreground furniture."
+      - src: vox/mid.png
+        depth: 0.55
+        prompt: "A single person cutout, transparent background, no face detail required."
+      - src: vox/fg.png
+        depth: 1.0
+        prompt: "Foreground desk cutout, transparent background."
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 28, y: 0}
+      to: {scale: 1.03, x: -28, y: 6}
+    transition_out: cut
+    overlays:
+      - kind: text
+        text: "LAYERS"
+        at: 0.12
+        hold: 1.2
+        entrance: pop
+        font: sans
+        size: 64
+        color: [236, 236, 236]
+        y: 280
+        sfx: pop
+
+  - id: article
+    type: image
+    caption: ["never static"]
+    key: ["static"]
+    min: 2.2
+    prompt: "A printed article page with no real words, only gray bars."
+    image: vox/article.png
+    grade: paper
+    grain: 0.06
+    paper: 0.16
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 8}
+      to: {scale: 1.031, x: 0, y: -12}
+    transition_out: zoom
+    transition: 0.3
+    overlays:
+      - kind: highlighter
+        x: 140
+        y: 560
+        w: 760
+        h: 48
+        at: 0.35
+        duration: 0.4
+        color: [185, 168, 10]
+        sfx: marker
+      - kind: text
+        text: "NEVER STILL"
+        at: 0.2
+        hold: 1.6
+        entrance: slide
+        font: sans
+        size: 54
+        color: [20, 20, 20]
+        y: 360
+
+  - id: punch
+    type: image
+    caption: ["one point"]
+    key: ["point"]
+    min: 1.8
+    prompt: "The same article page, slightly tighter, still without real words."
+    image: vox/article.png
+    grade: paper
+    grain: 0.05
+    paper: 0.12
+    camera:
+      ease: linear
+      from: {scale: 1.02, x: 0, y: 0}
+      to: {scale: 1.05, x: 8, y: -8}
+    transition_out: cut
+    overlays:
+      - kind: arrow
+        points: [[220, 980], [540, 760], [820, 900]]
+        at: 0.25
+        duration: 0.45
+        color: [176, 48, 42]
+        width: 8
+        sfx: whoosh

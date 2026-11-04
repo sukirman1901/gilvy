@@ -9,6 +9,7 @@ import subprocess
 from fractions import Fraction
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 from gilvy.errors import GilvyError
@@ -16,7 +17,10 @@ from gilvy.errors import GilvyError
 
 LIMITATIONS = (
     "Evidence extraction only, not automatic visual understanding or editable reconstruction. "
-    "Cut scores can miss morphs/fades or mistake large motion for a cut. "
+    "Hard-cut scores can miss morphs/fades or mistake large motion for a cut. "
+    "soft_transitions are dissolve candidates from a low-resolution blend test. "
+    "A fast join can still look like a hard cut, and a push can occasionally look like a dissolve. "
+    "They are not used as scene boundaries until you pass --boundaries. "
     "Frame timestamps are requested seek times, not recovered keyframes. "
     "Inspect every motion clip; fill observations separately from inferred easing, camera, and layers."
 )
@@ -52,6 +56,122 @@ def _cuts(text: str, duration: float, threshold: float, minimum: float) -> list[
             row["accepted"] = True
             last = t
     return candidates
+
+
+def _gray_frames(source: Path, dimensions: tuple[int, int]) -> tuple[np.ndarray, int, int]:
+    """Native-rate gray frames, area-scaled. Duplicate source frames are kept."""
+    width = 80
+    height = int(round(width * dimensions[1] / dimensions[0]))
+    height -= height % 2
+    height = max(2, height)
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-nostdin", "-i", str(source), "-an",
+             "-vf", f"scale={width}:{height}:flags=area",
+             "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise GilvyError(f"reference extraction failed: {exc}") from exc
+    if result.returncode:
+        raise GilvyError(f"reference extraction failed: {result.stderr[-2000:].decode(errors='replace').strip()}")
+    frame = width * height
+    count = len(result.stdout) // frame
+    if count < 2:
+        raise GilvyError("reference extraction failed: not enough frames to test dissolves")
+    frames = np.frombuffer(result.stdout[:count * frame], np.uint8).reshape(count, height, width).copy()
+    return frames, width, height
+
+
+def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -> list[dict]:
+    """Cross-dissolves: change spread across 0.25–0.8s that matches a linear blend.
+
+    A one-frame jump stays a hard cut. Thresholds were checked against the
+    attached history short: joins near 9.0s and 14.6s match; the 5.68s join
+    is a single-frame cut and is left in the hard-cut list.
+    """
+    if fps <= 0 or len(frames) < 4:
+        return []
+    gray = frames.astype(np.float32)
+    step = np.mean(np.abs(np.diff(gray, axis=0)), axis=(1, 2))
+    kept = [0]
+    for index in range(len(step)):
+        if step[index] >= 0.8:
+            kept.append(index + 1)
+    if kept[-1] != len(gray) - 1:
+        kept.append(len(gray) - 1)
+
+    def distance(a: int, b: int) -> float:
+        return float(np.mean(np.abs(gray[a] - gray[b])))
+
+    found = []
+    for start in range(len(kept)):
+        ia = kept[start]
+        for stop in range(start + 2, len(kept)):
+            ib = kept[stop]
+            span = (ib - ia) / fps
+            if span < 0.25:
+                continue
+            if span > 0.80:
+                break
+            t0, t1 = ia / fps, ib / fps
+            if any(t0 + 0.06 < cut < t1 - 0.06 for cut in hard_times):
+                continue
+            end = distance(ia, ib)
+            # 18 separates a real plate change from sensor-scale noise. A mild
+            # change only counts when it is very close to a linear blend, so a
+            # slow push (blend residual around 0.4) does not qualify.
+            if end < 18:
+                continue
+            sequence = kept[start:stop + 1]
+            steps = [distance(sequence[i], sequence[i + 1]) for i in range(len(sequence) - 1)]
+            peak = max(steps) if steps else end
+            if peak > 0.72 * end:
+                continue
+            errors = []
+            for sample in sequence[1:-1]:
+                alpha = (sample - ia) / max(1, ib - ia)
+                mix = (1 - alpha) * gray[ia] + alpha * gray[ib]
+                errors.append(float(np.mean(np.abs(gray[sample] - mix))))
+            if not errors:
+                continue
+            ratio = float(np.mean(errors)) / end
+            if ratio > 0.42 or (end < 28 and ratio > 0.22):
+                continue
+            found.append((1 - ratio, t0, t1, end))
+    found.sort(reverse=True)
+    chosen = []
+    for score, t0, t1, end in found:
+        if any(not (t1 < row["start"] - 0.05 or t0 > row["end"] + 0.05) for row in chosen):
+            continue
+        chosen.append({
+            "start": round(t0, 3),
+            "end": round(t1, 3),
+            "duration": round(t1 - t0, 3),
+            "kind": "dissolve",
+            "score": round(score, 3),
+            "endpoint_delta": round(end, 2),
+        })
+    chosen.sort(key=lambda row: row["start"])
+    return chosen
+
+
+def detect_soft_transitions(video_path: str | Path, hard_times: list[float] | None = None) -> list[dict]:
+    """Dissolve candidates for a local video. Hard-cut times are not re-labeled."""
+    source = Path(video_path).expanduser().resolve()
+    if not source.is_file():
+        raise GilvyError(f"video not found: {source}")
+    try:
+        info = json.loads(_run(["ffprobe", "-v", "error", "-show_entries",
+                               "stream=codec_type,width,height,avg_frame_rate",
+                               "-of", "json", str(source)]))
+        picture = next(s for s in info.get("streams", []) if s.get("codec_type") == "video")
+        dimensions = (int(picture["width"]), int(picture["height"]))
+        fps = float(Fraction(picture.get("avg_frame_rate", "0/1")))
+    except (ValueError, KeyError, StopIteration, ZeroDivisionError) as exc:
+        raise GilvyError("could not read video dimensions, rate and duration") from exc
+    frames, _, _ = _gray_frames(source, dimensions)
+    return _soft_transitions(frames, fps, list(hard_times or []))
 
 
 def analyze_reference(video_path: str | Path, output_dir: str | Path,
@@ -115,6 +235,7 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
     bounds = [0.0, *interior, duration]
     if len(bounds) - 1 > 60:
         raise GilvyError("more than 60 scenes detected; increase threshold/min_scene or pass manual boundaries")
+    soft = _soft_transitions(_gray_frames(source, dimensions)[0], rate, interior)
     # All validation precedes output creation. Failure leaves evidence for diagnosis;
     # the manifest is written only when every extraction succeeded.
     dest.mkdir(parents=True)
@@ -174,7 +295,7 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
     result = {"schema_version": 1, "source": str(source), "duration": duration,
               "source_width": dimensions[0], "source_height": dimensions[1], "average_fps": rate,
               "segmentation": method, "threshold": threshold, "min_scene": min_scene,
-              "candidate_cuts": candidates, "scenes": scenes, "contact_sheets": sheets,
+              "candidate_cuts": candidates, "soft_transitions": soft, "scenes": scenes, "contact_sheets": sheets,
               "creative_review": "required", "limitations": LIMITATIONS}
     manifest = dest / "reference.json"
     report = dest / "REVIEW.md"
@@ -184,8 +305,17 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
              "Watch every clip at normal speed; use stills for layout only. Separate observation from inference.",
              "Fill the observed/inferred fields in reference.json after inspection. No OCR, object tracking,",
              "beat detection or automatic easing/layer recovery has been performed.", "",
-             f"Segmentation: {method}. Boundaries are provisional unless reviewed.", "",
+             f"Segmentation: {method}. Boundaries are provisional unless reviewed.",
+             "soft_transitions are dissolve candidates. They do not split scenes until you rerun with --boundaries.",
              "To correct boundaries, rerun in a new directory with --boundaries 4.2 9.8 (interior seconds).", ""]
+    if soft:
+        lines += ["## Soft transitions", ""]
+        for row in soft:
+            lines.append(
+                f"- dissolve candidate {row['start']:.3f}–{row['end']:.3f}s "
+                f"(score {row['score']:.2f}, endpoint delta {row['endpoint_delta']:.1f})"
+            )
+        lines.append("")
     for scene in scenes:
         lines += [f"## Scene {scene['id']:03}: {scene['start']:.3f}–{scene['end']:.3f}s", ""]
         for clip in scene["clips"]:

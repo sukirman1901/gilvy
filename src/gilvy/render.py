@@ -14,11 +14,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from gilvy.assets import require_assets
 from gilvy.caption import caption, check_captions
 from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
+from gilvy.image_scene import camera_metrics, render_image_frame, zoom_through
+from gilvy.presets import PHOTO_PRESETS
 from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
@@ -54,6 +57,7 @@ def scene_payload(scene: Scene, episode: Episode) -> dict:
         "params": dict(scene.params),
         "entry": entry,
         "green": scene.green_role,
+        "style": episode.style,
     }
 
 
@@ -66,6 +70,7 @@ class RenderState:
     starts: np.ndarray
     total: float
     episode_dir: str
+    style: str = "house"
 
     def paint(self, index: int, u: float) -> Ctx:
         ctx = Ctx(self.theme)
@@ -82,18 +87,27 @@ class RenderState:
         caption(ctx, scene["caption"], scene["key"], u)
         return ctx
 
+    def picture(self, index: int, u: float) -> np.ndarray:
+        scene = self.scenes[index]
+        if scene["type"] == "image":
+            return render_image_frame(self.theme, scene, max(0.0, u), self.durations[index], self.episode_dir)
+        return compose(self.paint(index, u))
+
     def frame_array(self, n: int) -> np.ndarray:
         fps = self.theme.fps
         t = n / fps
         i = min(int(np.searchsorted(self.starts, t, side="right") - 1), len(self.durations) - 1)
         u = t - self.starts[i]
-        image = compose(self.paint(i, u))
-        xf = self.theme.crossfade
-        if i + 1 < len(self.durations) and u > self.durations[i] - xf:
-            k = eio((u - (self.durations[i] - xf)) / xf)
-            nxt_u = u - self.durations[i]
-            nxt = compose(self.paint(i + 1, nxt_u))
-            image = image * (1 - k) + nxt * k
+        image = self.picture(i, u)
+        if self.style in PHOTO_PRESETS:
+            image = self._photo_transition(image, i, u)
+        else:
+            xf = self.theme.crossfade
+            if i + 1 < len(self.durations) and u > self.durations[i] - xf:
+                k = eio((u - (self.durations[i] - xf)) / xf)
+                nxt_u = u - self.durations[i]
+                nxt = compose(self.paint(i + 1, nxt_u))
+                image = image * (1 - k) + nxt * k
         bg = np.array(self.theme.bg)
         if t < self.theme.intro:
             fade = cl(t / self.theme.intro)
@@ -102,6 +116,25 @@ class RenderState:
             fade = cl((self.total - t) / self.theme.outro)
             image = image * fade + bg * (1 - fade)
         return image.astype(np.uint8)
+
+    def _photo_transition(self, image: np.ndarray, index: int, u: float) -> np.ndarray:
+        """Hard cut unless this plate asked for a dissolve or a zoom-through.
+
+        House episodes keep the 0.45s eased crossfade and never call this.
+        """
+        params = self.scenes[index].get("params") or {}
+        kind = params.get("transition_out") or "cut"
+        xf = float(params.get("transition") or 0)
+        if kind == "cut" or xf <= 0 or index + 1 >= len(self.durations):
+            return image
+        if u <= self.durations[index] - xf:
+            return image
+        k = (u - (self.durations[index] - xf)) / xf
+        k = 0.0 if k < 0 else 1.0 if k > 1 else k
+        nxt = self.picture(index + 1, u - self.durations[index])
+        if kind == "zoom":
+            return zoom_through(image, nxt, k)
+        return image * (1.0 - k) + nxt * k
 
     def frame_bytes(self, n: int) -> bytes:
         return self.frame_array(n).tobytes()
@@ -120,6 +153,7 @@ def build_state(episode: Episode, durations: list[float], impls: list | None = N
         starts=starts,
         total=float(starts[-1]),
         episode_dir=str(episode.source_dir),
+        style=episode.style,
     )
 
 
@@ -133,6 +167,7 @@ def scene_durations(episode: Episode, voiced: list[float]) -> list[float]:
 
 
 def preflight(episode: Episode) -> None:
+    require_assets(episode)
     ctx = Ctx(theme_for(episode))
     check_captions(ctx, [scene_payload(scene, episode) for scene in episode.scenes])
 
@@ -388,6 +423,7 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
         "rate": episode.rate,
         "tts": tts_name if episode.audio_mode == "voiceover" else "none",
         "audio_mode": episode.audio_mode,
+        "style": episode.style,
         "duration": state.total,
         "fps": state.theme.fps,
         "format": episode.format,
@@ -408,6 +444,11 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "caption": scene.caption,
                 "key": scene.key,
                 "vo": scene.vo,
+                **(
+                    {"camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
+                     "transition_out": scene.params.get("transition_out", "cut")}
+                    if scene.type == "image" else {}
+                ),
             }
         )
     dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

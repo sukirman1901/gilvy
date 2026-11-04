@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from gilvy.assets import build_manifest
 from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.formats import get_profile
@@ -232,6 +233,9 @@ def run(argv: list[str] | None = None) -> int:
 
     sub.add_parser("elements", help="list composable visual elements and their verbs")
     sub.add_parser("motion-reference", help="read visual vocabulary and Bojonegoro motion study")
+    sub.add_parser("reference-styles", help="measured vox-explainer and history-story directing guide")
+    assets = sub.add_parser("assets", help="list image plates an episode must generate before render")
+    assets.add_argument("episode")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
@@ -277,6 +281,12 @@ def run(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "motion-reference":
             print(motion_reference_notes())
+            return 0
+        if args.command == "reference-styles":
+            print(Path(__file__).resolve().parent.joinpath("REFERENCE_STYLES.md").read_text(encoding="utf-8"))
+            return 0
+        if args.command == "assets":
+            print(json.dumps(build_manifest(load_episode(args.episode)), indent=2))
             return 0
         if args.command == "new":
             return _cmd_new(args.name)

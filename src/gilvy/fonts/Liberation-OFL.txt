@@ -1,0 +1,8 @@
+Liberation Serif
+Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name Liberation.
+Digitized data copyright (c) 2010 Google Corporation with Reserved Font
+Names Arimo, Tinos and Cousine.
+
+Licensed under the SIL Open Font License, Version 1.1.
+The license text is in OFL.txt in this directory.
+https://scripts.sil.org/OFL

@@ -121,12 +121,36 @@ gilvy analyze-reference reference.mp4 --out out/reference-study
 ```
 
 CLI `analyze-reference` / MCP `analyze_reference` produce provisional cut
-boundaries, timestamped frames, paginated contact sheets, full-coverage motion
-clips with transition handles and source audio, plus a JSON manifest and review
-worksheet. Manual boundaries can override the heuristic. This studies local
-video; it does not download URLs, understand a style automatically, or recover
-editable layers/keyframes. Watch all clips and separate observation from
-inference before reconstructing. See [reference analysis](docs/reference-analysis.md).
+boundaries, dissolve candidates (`soft_transitions`), timestamped frames,
+paginated contact sheets, full-coverage motion clips with transition handles
+and source audio, plus a JSON manifest and review worksheet. Manual boundaries
+can override the heuristic. Dissolves are listed and do not become cuts until
+you pass `--boundaries`. This studies local video; it does not download URLs,
+understand a style automatically, or recover editable layers/keyframes. Watch
+all clips and separate observation from inference before reconstructing. See
+[reference analysis](docs/reference-analysis.md).
+
+## Opt-in reference presets
+
+`style: vox-explainer` and `style: history-story` are image-plate episodes.
+House explainers stay on the still camera and the drawn scenes. The measured
+ranges, what was only observed, and the gaps are in
+[REFERENCE_STYLES.md](src/gilvy/REFERENCE_STYLES.md).
+
+```bash
+gilvy download-reference 'https://www.youtube.com/watch?v=...' --out out/reference-download
+gilvy analyze-reference out/reference-download/<video> --out out/reference-study
+gilvy reference-styles
+gilvy assets examples/styles/history-story.yaml
+gilvy render examples/styles/history-story.yaml --tts fixture
+gilvy qc out/history-story-sample.mp4
+```
+
+`gilvy assets` lists every PNG the episode needs and a style prompt for each.
+Render fails with those paths if a file is missing. Generate the art outside
+the repo. Do not commit frames from the reference. Samples under
+`examples/styles/` use procedural stand-in plates. MCP adds `reference_styles`
+and `asset_manifest`.
 
 ## Opt-in product motion
 
