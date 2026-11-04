@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFont
 
 from gilvy.errors import GilvyError
 from gilvy.formats import DESIGN_H, DESIGN_W
@@ -44,7 +44,7 @@ def _relative(episode_dir: Path, src: str) -> str:
     return path.as_posix()
 
 
-def plate_pixel_size(camera: dict) -> dict:
+def plate_pixel_size(camera: dict, duration: float | None = None) -> dict:
     """Source size that still covers the widest pan and the tightest zoom.
 
     At scale 1 the frame is 1080×1920. Pan needs a margin on every side. The
@@ -55,8 +55,20 @@ def plate_pixel_size(camera: dict) -> dict:
     pan_x = max(abs(float(start["x"])), abs(float(end["x"])))
     pan_y = max(abs(float(start["y"])), abs(float(end["y"])))
     tight = max(float(start["scale"]), float(end["scale"]), 1.0)
-    width = int(math.ceil((DESIGN_W + 2 * pan_x) * tight))
-    height = int(math.ceil((DESIGN_H + 2 * pan_y) * tight))
+    from gilvy.image_scene import camera_path
+    if duration is None:
+        duration = max((k["t"] for keys in (camera.get("tracks") or {}).values() for k in keys), default=2.5)
+    poses = [pose for _, pose in camera_path(camera, max(duration, 1e-6))]
+    pan_x = max(abs(p["x"]) for p in poses)
+    pan_y = max(abs(p["y"]) for p in poses)
+    tight = max(1.0, max(p["scale"] for p in poses))
+    # A varying rotation may reach its bounding-box maximum between keys.
+    # The diagonal is a conservative envelope for every angle, not just endpoints.
+    rotated = any(abs(p["rotation"]) > 1e-8 for p in poses)
+    canvas_w = math.hypot(DESIGN_W, DESIGN_H) if rotated else DESIGN_W
+    canvas_h = math.hypot(DESIGN_W, DESIGN_H) if rotated else DESIGN_H
+    width = int(math.ceil((canvas_w + 2 * pan_x) * tight))
+    height = int(math.ceil((canvas_h + 2 * pan_y) * tight))
     return {"width": width, "height": height, "pan_x": pan_x, "pan_y": pan_y, "scale": tight}
 
 
@@ -187,23 +199,71 @@ def compare_asset(path: str | Path, refs: list) -> dict:
     }
 
 
+def collect_dependencies(episode) -> list[dict]:
+    """Known local inputs shared by manifest, preflight and publication checks.
+
+    Arbitrary files opened by custom Python cannot be inferred statically.
+    """
+    from gilvy.theme import bundled_fonts
+    rows = []
+
+    def add(src, kind, field, index=None, scene=None):
+        path = Path(src)
+        if not path.is_absolute():
+            path = episode.source_dir / path
+        path = path.resolve()
+        rows.append({"src": _relative(episode.source_dir, str(src)), "path": str(path),
+                     "kind": kind, "field": field, "scene_index": index,
+                     "scene_id": (scene.id or f"s{index}") if scene else None,
+                     "exists": path.is_file()})
+
+    add(episode.source_path, "episode", "source_path")
+    if episode.music:
+        add(episode.music, "audio", "music")
+    fonts = Path(episode.font_dir or bundled_fonts())
+    for name in ("Poppins-Medium.ttf", "Poppins-SemiBold.ttf"):
+        add(fonts / name, "font", f"font_dir/{name}")
+    for index, scene in enumerate(episode.scenes, 1):
+        if scene.type == "python":
+            add(scene.entry.partition(":")[0], "python", "entry", index, scene)
+        if scene.type != "image":
+            continue
+        for i, layer in enumerate(scene.params.get("layers") or []):
+            add(layer["src"], "image", f"layers[{i}].src", index, scene)
+        for i, overlay in enumerate(scene.params.get("overlays") or []):
+            if overlay.get("kind") == "card":
+                add(overlay["src"], "image", f"overlays[{i}].src", index, scene)
+        if any(o.get("font") == "serif" or o.get("kind") == "headline" for o in scene.params.get("overlays") or []):
+            add(bundled_fonts() / "LiberationSerif-Regular.ttf", "font", "overlays.font", index, scene)
+    return rows
+
+
 def build_manifest(episode, style_refs: list | None = None) -> dict:
     """Asset list for an episode. Missing files are reported, not created."""
     style = episode.style
     prefix = STYLE_PROMPTS.get(style, "")
     assets = []
+    dependencies = collect_dependencies(episode)
     for index, scene in enumerate(episode.scenes, 1):
         if scene.type != "image":
             continue
         layers = scene.params.get("layers") or []
-        size = plate_pixel_size(scene.params["camera"])
-        for layer in layers:
-            src = layer["src"]
-            path = Path(src)
-            if not path.is_absolute():
-                path = episode.source_dir / path
-            path = path.resolve()
-            role = _role(float(layer.get("depth", 1)), len(layers))
+        camera = scene.params["camera"]
+        duration = scene.min
+        if episode.audio_mode == "voiceover" and not (episode.vo_overrun or scene.vo_overrun):
+            # Before synthesis, a minimum is not a final shot duration. Include
+            # all authored track extrema so a longer VO cannot under-size plates.
+            duration = max(float(duration or 0), max((k["t"] for keys in camera["tracks"].values() for k in keys), default=0)) or None
+        size = plate_pixel_size(camera, duration)
+        for dependency in dependencies:
+            if dependency["kind"] != "image" or dependency["scene_index"] != index:
+                continue
+            field = dependency["field"]
+            card = field.startswith("overlays")
+            position = int(field.split("[")[1].split("]")[0])
+            layer = (scene.params["overlays"] if card else layers)[position]
+            src, path = layer["src"], Path(dependency["path"])
+            role = "card" if card else _role(float(layer.get("depth", 1)), len(layers))
             subject = " ".join(part for part in (scene.params.get("prompt") or "", layer.get("prompt") or "") if part)
             prompt = prefix
             if role != "still":
@@ -217,6 +277,7 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
             item = {
                 "scene_index": index,
                 "scene_id": scene.id or f"s{index}",
+                "field": field,
                 "role": role,
                 "depth": layer.get("depth", 1),
                 "src": _relative(episode.source_dir, src),
@@ -227,7 +288,19 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
                 "overscan": {"pan_x": size["pan_x"], "pan_y": size["pan_y"], "scale": size["scale"]},
                 "prompt": prompt.strip(),
             }
-            if style_refs and path.is_file():
+            if path.is_file():
+                try:
+                    with Image.open(path) as opened:
+                        opened.verify()
+                    # Some formats (notably JPEG) only validate headers in
+                    # verify(); force pixel decoding before timing/TTS begins.
+                    with Image.open(path) as opened:
+                        opened.load()
+                    item["valid"] = True
+                except (OSError, ValueError) as exc:
+                    item["valid"] = False
+                    item["error"] = str(exc)
+            if style_refs and path.is_file() and item.get("valid"):
                 scoped = style_refs
                 if any(ref.get("scene_index") is not None for ref in style_refs):
                     scoped = [ref for ref in style_refs if ref.get("scene_index") == index]
@@ -242,7 +315,9 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
         "prompt_template": prefix,
         "style_refs": list(style_refs or []),
         "assets": assets,
+        "dependencies": dependencies,
         "missing": [item["src"] for item in assets if not item["exists"]],
+        "invalid": [item["src"] for item in assets if item.get("valid") is False],
         "image_qc": {
             "checked": len(qc_rows),
             "ok": all(row["ok"] for row in qc_rows) if qc_rows else None,
@@ -253,18 +328,23 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
 
 def require_assets(episode) -> None:
     """Fail render before encode when a referenced plate is not on disk."""
-    if episode.style not in PHOTO_PRESETS:
-        return
     manifest = build_manifest(episode)
-    if not manifest["missing"]:
+    missing_dependencies = [d for d in manifest["dependencies"] if not d["exists"]]
+    for dependency in manifest["dependencies"]:
+        if dependency["kind"] == "font" and dependency["exists"]:
+            try:
+                ImageFont.truetype(dependency["path"], 12)
+            except OSError as exc:
+                raise GilvyError(f"corrupt font: {dependency['path']}", field=dependency["field"]) from exc
+    if not missing_dependencies and not manifest["invalid"]:
         return
-    lines = []
+    lines = [f"- {d['field']}: {d['src']}" for d in missing_dependencies if d["kind"] != "image"]
     for item in manifest["assets"]:
-        if not item["exists"]:
-            lines.append(f"- scene {item['scene_index']} ({item['scene_id']}): {item['src']}")
+        if not item["exists"] or item.get("valid") is False:
+            lines.append(f"- scene {item['scene_index']} ({item['scene_id']}) {item['field']}: {item['src']}")
     joined = "\n".join(lines)
     raise GilvyError(
-        "missing image assets:\n"
+        "missing image assets or corrupt images:\n"
         f"{joined}\n"
         "Generate each file from its prompt (`gilvy assets <episode>`), then render again."
     )

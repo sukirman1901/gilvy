@@ -1,7 +1,7 @@
 # Creative review: evidence before the full cut
 
 Use these examples to reason about a relationship, not to reproduce the same
-symbols on every topic. The locked visual style still applies.
+symbols on every topic. Locked visual rules apply to house examples only; custom compositor work follows its selected brief.
 
 ## A weak and stronger direction
 

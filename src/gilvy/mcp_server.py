@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import warnings
+import subprocess
 from pathlib import Path
 
 warnings.filterwarnings("ignore", message="Field 'lifespan' has an incomplete definition")
@@ -57,8 +58,13 @@ mcp = FastMCP(
 )
 
 
-def _fail(exc: GilvyError) -> str:
-    return json.dumps({"ok": False, "error": str(exc)})
+def _fail(exc: Exception) -> str:
+    if not isinstance(exc, GilvyError):
+        code = "io_error" if isinstance(exc, OSError) else "encoder_error" if isinstance(exc, subprocess.SubprocessError) else "invalid_input"
+        exc = GilvyError(str(exc), code=code)
+    return json.dumps({"ok": False, "error": str(exc), "code": exc.code,
+                       "field": exc.field,
+                       "suggestion": "Correct the indicated input or dependency, then retry."})
 
 
 @mcp.tool()
@@ -74,7 +80,7 @@ def render_video(episode_path: str, output: str = "", tts: str = "edge", workers
         result = render_episode(episode, dest, tts, workers)
         result["ok"] = bool(result["qc"]["ok"])
         return json.dumps(result)
-    except GilvyError as exc:
+    except (GilvyError, OSError, subprocess.SubprocessError) as exc:
         return _fail(exc)
 
 
@@ -95,17 +101,17 @@ def preview_frames(episode_path: str, output_dir: str = "", tts: str = "edge", f
         result = preview_episode(episode, Path(dest) if dest else None, tts, fraction)
         result["ok"] = True
         return json.dumps(result)
-    except GilvyError as exc:
+    except (GilvyError, OSError, subprocess.SubprocessError) as exc:
         return _fail(exc)
 
 
 @mcp.tool()
 def qc_report(video_path: str, timeline: str = "", audio_mode: str = "") -> str:
-    """Check green-ratio, silence gaps, and blank or dark frames. ok is false when a rule is broken."""
+    """Recheck product technical integrity or house timeline rules. Missing context is reported explicitly."""
     try:
         report = qc_video(video_path, timeline or None, audio_mode or None)
         return json.dumps(report.to_dict())
-    except GilvyError as exc:
+    except (GilvyError, OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
         return _fail(exc)
 
 

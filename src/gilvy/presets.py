@@ -111,6 +111,14 @@ def camera_problem(metrics: dict, rules: dict, label: str) -> str | None:
     speed = (float(pan["x"]) ** 2 + float(pan["y"]) ** 2) ** 0.5
     duration = metrics.get("duration")
     push_lo, push_hi, pull_lo, pull_hi = _band(rules, None if duration is None else float(duration))
+    if metrics.get("explicit_tracks"):
+        push = float(metrics.get("peak_push_pct_per_s", 0))
+        pull = float(metrics.get("peak_pull_pct_per_s", 0))
+        if push > push_hi or pull > pull_hi:
+            return f"{label} peak segment zoom (push {push:.2f}, pull {pull:.2f}%/s) exceeds the plate band"
+        # A round trip has zero net displacement, but is not a static shot.
+        if max(push, pull) >= .4 or float(metrics.get("peak_pan_px_per_s", 0)) >= rules["pan_min"] or metrics.get("travel", {}).get("rotation", 0) >= .4:
+            return None
     if abs(zoom) >= 0.4 and not zoom_in_band(zoom, rules, None if duration is None else float(duration)):
         return (
             f"{label} zoom {zoom:.2f}%/s is outside the plate band "

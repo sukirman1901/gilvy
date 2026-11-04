@@ -1,0 +1,20 @@
+style: product
+size: [640, 360]
+fps: 30
+duration: 2
+background:
+  base: '#351453'
+layers:
+  - id: headline
+    type: text
+    width: 560
+    height: 100
+    x: 320
+    y: 180
+    text: Make it move.
+    size: 48
+    color: '#ffc7ee'
+    overflow: error
+    keyframes:
+      opacity: [[0, 0], [0.5, 1, out_cubic]]
+      y: [[0, 210], [0.6, 180, out_cubic]]

@@ -53,18 +53,19 @@ def test_array_rules():
 def test_qc_pass_blank_green_and_silence(tmp_path: Path):
     ok = tmp_path / "ok.mp4"
     _write(ok, "drawbox=x=20:y=20:w=120:h=50:color=white:t=fill", "anull", 3, "0x0a0a0a")
-    report = qc_video(ok)
+    # Synthetic fixtures have no sidecar: explicitly select house VO checks.
+    report = qc_video(ok, audio_mode="voiceover")
     assert report.ok, report.violations
 
     blank = tmp_path / "blank.mp4"
     _write(blank, None, "anull", 3, "0x0a0a0a")
-    report = qc_video(blank)
+    report = qc_video(blank, audio_mode="voiceover")
     assert not report.ok
     assert any("blank" in item for item in report.violations)
 
     green = tmp_path / "green.mp4"
     _write(green, None, "anull", 3, "0xdaff59")
-    report = qc_video(green)
+    report = qc_video(green, audio_mode="voiceover")
     assert not report.ok
     assert any("green" in item for item in report.violations)
 
@@ -76,6 +77,6 @@ def test_qc_pass_blank_green_and_silence(tmp_path: Path):
         6,
         "0x0a0a0a",
     )
-    report = qc_video(quiet)
+    report = qc_video(quiet, audio_mode="voiceover")
     assert not report.ok
     assert any("silence" in item for item in report.violations)

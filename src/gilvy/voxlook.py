@@ -148,13 +148,15 @@ def draw_card(layer: Image.Image, card: Image.Image, xy: tuple[float, float],
 
 
 def _perspective(image: Image.Image, tilt: float) -> Image.Image:
-    """Foreshorten the top edge. Positive tilt leans the card back."""
+    """Positive tilt foreshortens the top; negative tilt foreshortens the bottom."""
     tilt = max(-18.0, min(18.0, float(tilt)))
     width, height = image.size
     inset = int(round(width * abs(tilt) / 18.0 * 0.16))
     if inset < 1:
         return image.convert("RGBA")
     target = [(inset, 0), (width - 1 - inset, 0), (width - 1, height - 1), (0, height - 1)]
+    if tilt < 0:
+        target = [(0, 0), (width - 1, 0), (width - 1 - inset, height - 1), (inset, height - 1)]
     source = [(0, 0), (width - 1, 0), (width - 1, height - 1), (0, height - 1)]
     coeffs = _perspective_coeffs(source, target)
     warped = image.convert("RGBA").transform(

@@ -17,7 +17,7 @@ from gilvy.scenes import DOT_CAP, SCENES
 from gilvy.theme import BG, GREEN, MIN_DURATION, WHITE
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
-_RATE = re.compile(r"^[+-]\d+(%|Hz)$")
+_RATE = re.compile(r"^[+-]\d+%$")
 _VOICES = {
     "en-US": "en-US-AndrewNeural",
     "id-ID": "id-ID-ArdiNeural",
@@ -147,7 +147,7 @@ def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE, v
         raise EpisodeError(f"scene {index}: set min explicitly for {audio_mode} reading time")
     green = raw.get("green")
     if green is not None:
-        if green not in _GREEN:
+        if not isinstance(green, str) or green not in _GREEN:
             raise EpisodeError(f"scene {index}: green must be one of none, focus, any")
     entry = raw.get("entry")
     params = {}
@@ -218,8 +218,8 @@ def load_episode(path: str | Path) -> Episode:
     if not isinstance(voice, str) or (audio_mode == "voiceover" and not voice.strip()):
         raise EpisodeError("set voice (for example id-ID-ArdiNeural) or a known language (en-US, id-ID)")
     rate = str(data.get("rate") or "-8%")
-    if not _RATE.match(rate):
-        raise EpisodeError(f"rate must look like -8% or +0Hz, got {rate!r}")
+    if not _RATE.fullmatch(rate):
+        raise EpisodeError(f"rate must be a signed percentage such as -8% or +0%, got {rate!r}", field="rate")
     name = str(data.get("name") or source.stem)
     if not _NAME.match(name):
         raise EpisodeError("name must be letters, numbers, hyphens, and underscores")

@@ -117,6 +117,8 @@ def _key(raw, index: int, prop: str, scale_max: float) -> dict:
         raise EpisodeError(f"scene {index}: a key needs numeric t and v") from exc
     if not math.isfinite(t) or t < 0 or t > 30:
         raise EpisodeError(f"scene {index}: key t must be seconds from 0 to 30")
+    if not math.isfinite(v):
+        raise EpisodeError(f"scene {index}: {prop} key value must be finite")
     ease = raw.get("ease") or "linear"
     if ease not in EASES:
         raise EpisodeError(f"scene {index}: ease must be one of {', '.join(EASES)}")
@@ -125,7 +127,11 @@ def _key(raw, index: int, prop: str, scale_max: float) -> dict:
         points = raw.get("bezier")
         if not isinstance(points, (list, tuple)) or len(points) != 4:
             raise EpisodeError(f"scene {index}: cubic-bezier needs bezier: [x1, y1, x2, y2]")
+        if any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in points):
+            raise EpisodeError(f"scene {index}: bezier points must be finite numbers")
         bezier = tuple(float(n) for n in points)
+        if not 0 <= bezier[0] <= 1 or not 0 <= bezier[2] <= 1:
+            raise EpisodeError(f"scene {index}: bezier x coordinates must be from 0 to 1")
     if prop == "scale" and not 0.5 <= v <= scale_max:
         raise EpisodeError(f"scene {index}: scale key must be from 0.5 to {scale_max}")
     if prop == "opacity" and not 0 <= v <= 1:
