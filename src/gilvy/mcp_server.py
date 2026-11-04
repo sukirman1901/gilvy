@@ -69,6 +69,16 @@ def _fail(exc: Exception) -> str:
 
 
 @mcp.tool()
+def doctor() -> str:
+    """Discover installed capabilities without execution. Presence is not runtime readiness.
+
+    No rendering, downloading, or inference is run; cutout inference stays unverified.
+    """
+    from gilvy.capabilities import capability_report
+    return json.dumps(capability_report())
+
+
+@mcp.tool()
 def render_video(episode_path: str, output: str = "", tts: str = "edge", workers: int = 0) -> str:
     """Render a YAML episode to a 1080x1920 H.264/AAC mp4 and run QC.
 
