@@ -246,9 +246,9 @@ def _row(effect: str, ref, replica, kind: str) -> dict:
     if ref is None or replica is None:
         delta = None
         ok = False
-    elif kind == "abs":
+    elif kind == "dissolve":
         delta = round(float(replica) - float(ref), 3)
-        ok = abs(delta) <= 0.5
+        ok = abs(delta) <= 0.15
     elif kind == "rel":
         delta = round(float(replica) - float(ref), 3)
         ok = abs(delta) <= max(0.4, 0.05 * abs(float(ref)))
@@ -277,10 +277,10 @@ def _row(effect: str, ref, replica, kind: str) -> dict:
 TARGETS = (
     ("open pan x px/s", 12.4, "open-pan", "pan_x", "pan"),
     ("open pan y px/s", 14.1, "open-pan", "pan_y", "pan"),
-    ("dissolve long s", 1.46, "dissolve-long", "dissolve", "abs"),
+    ("dissolve long s", 1.46, "dissolve-long", "dissolve", "dissolve"),
     ("pull zoom %/s", -3.17, "pull", "zoom", "rel"),
     ("pull rotation deg", 1.11, "pull", "rotation", "deg"),
-    ("dissolve short s", 0.709, "dissolve-short", "dissolve", "abs"),
+    ("dissolve short s", 0.709, "dissolve-short", "dissolve", "dissolve"),
     ("drift zoom %/s", -1.44, "drift", "zoom", "rel"),
     ("sweep pan y px/s", -58.9, "sweep", "pan_y", "pan"),
     ("whip present", True, "sweep", "whip", "eq"),

@@ -18,8 +18,8 @@
     {
       "effect": "dissolve long s",
       "ref": 1.46,
-      "replica": 1.0397,
-      "delta": -0.42,
+      "replica": 1.4403,
+      "delta": -0.02,
       "pass": true
     },
     {
@@ -39,8 +39,8 @@
     {
       "effect": "dissolve short s",
       "ref": 0.709,
-      "replica": 0.5079,
-      "delta": -0.201,
+      "replica": 0.7036,
+      "delta": -0.005,
       "pass": true
     },
     {

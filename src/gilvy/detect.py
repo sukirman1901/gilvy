@@ -618,14 +618,16 @@ def _whip_frame(frames: np.ndarray) -> int | None:
 
 
 def _dissolve(frames: np.ndarray, fps: float) -> dict | None:
-    """Dissolve length from the blend coefficient, 2% to 98% alpha.
+    """Full dissolve length from the blend coefficient.
 
-    A frame is (1 − α) × outgoing + α × incoming. Ease-in spends most of its
-    time under a frame-diff threshold, so the slow tail was dropped. α is the
-    least-squares coefficient against the first and last frames, and the
-    length is the time α spends between 0.02 and 0.98. A zoom is not a blend:
-    its residual against that pair stays large, and a hard cut crosses the
-    band in one frame.
+    A frame is (1 − α) × outgoing + α × incoming. The 2% and 98% crossings
+    are where the blend is actually visible: an ease-in tail sits under a
+    frame-diff threshold, so that clock is the measurement. easeInCubic
+    spends only 72% of its overlap between those levels, and reporting that
+    slice made a 1.46s dissolve read as 1.04s. The duration is the overlap
+    implied by stretching the fitted ease from those crossings out to 0 and 1.
+    A zoom is not a blend: its residual against the endpoint pair stays large,
+    and a hard cut crosses the band in one frame.
     """
     small = frames[:, ::2, ::2, :].astype(np.float32)
     outgoing = small[0]
@@ -651,23 +653,77 @@ def _dissolve(frames: np.ndarray, fps: float) -> dict | None:
         residuals.append(float(np.mean(np.abs(small[index] - guess))))
     if float(np.median(residuals)) > 14.0:
         return None
-    start = _alpha_time(alphas, 0.02, fps)
-    end = _alpha_time(alphas, 0.98, fps)
-    if start is None or end is None or end <= start:
+    start_02 = _alpha_time(alphas, 0.02, fps)
+    end_98 = _alpha_time(alphas, 0.98, fps)
+    if start_02 is None or end_98 is None or end_98 <= start_02:
         return None
-    duration = end - start
+    fitted = _dissolve_overlap(alphas, fps, start_02, end_98)
+    if fitted is None:
+        return None
+    start, end, duration, ease, rmse = fitted
     if duration < 0.2 or duration > 2.5:
         return None
-    i0 = max(0, int(start * fps))
-    i1 = min(len(alphas) - 1, int(round(end * fps)))
-    ease = fit_ease(alphas[i0:i1 + 1]) if i1 - i0 >= 3 else None
     return {
         "start": round(start, 4),
         "end": round(end, 4),
         "duration": round(duration, 4),
-        "ease": (ease or {}).get("ease", "linear"),
-        "rmse": (ease or {}).get("rmse", 0),
+        "ease": ease,
+        "rmse": round(rmse, 4),
     }
+
+
+def _ease_inverse(name: str, level: float) -> float:
+    """Progress in [0, 1] at which `name` reaches `level`."""
+    level = 0.0 if level < 0 else 1.0 if level > 1 else level
+    lo, hi = 0.0, 1.0
+    for _ in range(24):
+        mid = (lo + hi) / 2
+        if apply_ease(name, mid) < level:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _dissolve_overlap(alphas: np.ndarray, fps: float, start_02: float, end_98: float):
+    """Overlap whose ease passes through the 2% and 98% crossings.
+
+    The ease is the candidate whose extrapolated curve matches the whole
+    alpha series, not the name with the lowest error on the inner slice.
+    easeInCubic and easeInQuad look alike between 2% and 98%, and the quad
+    inverse would leave a 1.46s blend 0.23s short.
+    """
+    best = None
+    times = np.arange(len(alphas)) / fps
+    for ease in FIT_EASES:
+        p02 = _ease_inverse(ease, 0.02)
+        p98 = _ease_inverse(ease, 0.98)
+        frac = p98 - p02
+        if frac < 0.05:
+            continue
+        full = (end_98 - start_02) / frac
+        if not 0.2 <= full <= 2.5:
+            continue
+        start = start_02 - p02 * full
+        predicted = np.empty(len(alphas), np.float64)
+        for index, time in enumerate(times):
+            if time <= start:
+                predicted[index] = 0.0
+            elif time >= start + full:
+                predicted[index] = 1.0
+            else:
+                predicted[index] = apply_ease(ease, (time - start) / full)
+        # Score the rise. The holds on either side are zero for every ease.
+        rising = (alphas > 0.02) & (alphas < 0.98)
+        if int(rising.sum()) < 3:
+            rising = np.ones(len(alphas), bool)
+        rmse = float(np.sqrt(np.mean((predicted[rising] - alphas[rising]) ** 2)))
+        if best is None or rmse < best[0]:
+            best = (rmse, start, start + full, full, ease)
+    if best is None:
+        return None
+    rmse, start, end, full, ease = best
+    return start, end, full, ease, rmse
 
 
 def _alpha_time(alphas: np.ndarray, level: float, fps: float) -> float | None:
