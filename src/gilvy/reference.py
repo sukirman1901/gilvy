@@ -84,7 +84,7 @@ def _gray_frames(source: Path, dimensions: tuple[int, int]) -> tuple[np.ndarray,
 
 
 def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -> list[dict]:
-    """Cross-dissolves: change spread across 0.25–2.5s that matches a linear blend.
+    """Cross-dissolves: change spread across 0.25–4s that matches a linear blend.
 
     A one-frame jump stays a hard cut. Thresholds were checked against the
     attached history short: joins near 9.0s and 14.6s match; the 5.68s join
@@ -112,9 +112,9 @@ def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -
             span = (ib - ia) / fps
             if span < 0.25:
                 continue
-            # Photo dissolves may run to 2.5s. The old 0.80s ceiling cut a 1.4s
+            # Photo dissolves may run to 4s. The old 0.80s ceiling cut a 1.4s
             # blend off before the 10%–90% clock (1.12s) could even be reported.
-            if span > 2.5:
+            if span > 4.0:
                 break
             t0, t1 = ia / fps, ib / fps
             if any(t0 + 0.06 < cut < t1 - 0.06 for cut in hard_times):

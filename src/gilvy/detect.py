@@ -661,7 +661,7 @@ def _dissolve(frames: np.ndarray, fps: float) -> dict | None:
     if fitted is None:
         return None
     start, end, duration, ease, rmse = fitted
-    if duration < 0.2 or duration > 2.5:
+    if duration < 0.2 or duration > 4.0:
         return None
     return {
         "start": round(start, 4),
@@ -702,7 +702,7 @@ def _dissolve_overlap(alphas: np.ndarray, fps: float, start_02: float, end_98: f
         if frac < 0.05:
             continue
         full = (end_98 - start_02) / frac
-        if not 0.2 <= full <= 2.5:
+        if not 0.2 <= full <= 4.0:
             continue
         start = start_02 - p02 * full
         predicted = np.empty(len(alphas), np.float64)
