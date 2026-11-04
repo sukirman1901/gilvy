@@ -68,9 +68,9 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
     ease_name = raw.get("transition_ease") or "linear"
     if ease_name not in EASES and ease_name != "linear":
         raise EpisodeError(f"scene {index}: transition_ease must be a track ease")
-    # An eased dissolve may run to 2.5s (the reference joins past 2s). A plain
-    # linear one stays at 2.0 so older episodes keep the same bound.
-    limit = 2.5 if ease_name != "linear" else 2.0
+    # An eased dissolve may run to 4s. ref1 has a 3.7s join; a plain linear
+    # one stays at 2.0 so older episodes keep the same bound.
+    limit = 4.0 if ease_name != "linear" else 2.0
     if not math.isfinite(seconds) or not 0 <= seconds <= limit:
         raise EpisodeError(f"scene {index}: transition must be seconds from 0 to {limit}")
     params["transition"] = seconds
@@ -370,6 +370,7 @@ def _draw_overlay(pen, layer, item, u, start, theme, x0, y0):
         return
     duration = float(item.get("duration") or 0.4)
     progress = cl((u - start) / duration) if duration else 1.0
+    progress = apply_ease(item.get("ease") or "linear", progress)
     color = item["color"]
     if kind == "strike":
         origin = _map(theme, item["x"], item["y"], x0, y0)
@@ -428,9 +429,18 @@ def _draw_text(layer, item, u, start, theme, x0, y0):
     pop = 1.0
     if item["entrance"] == "pop":
         p = cl(local / 0.20)
-        pop = 0.86 + 0.22 * eo(p)
-        if p > 0.7:
-            pop = 1.0 + (pop - 1.0) * (1.0 - cl((p - 0.7) / 0.3))
+        if item.get("overshoot") is None:
+            pop = 0.86 + 0.22 * eo(p)
+            if p > 0.7:
+                pop = 1.0 + (pop - 1.0) * (1.0 - cl((p - 0.7) / 0.3))
+        else:
+            # Peak is 1 + overshoot, then it settles to 1. The default path above
+            # stays put so existing pops do not change size.
+            overshoot = float(item["overshoot"])
+            peak = 1.0 + overshoot
+            pop = (1.0 - overshoot) + (peak - (1.0 - overshoot)) * eo(p)
+            if p > 0.7:
+                pop = 1.0 + (peak - 1.0) * (1.0 - cl((p - 0.7) / 0.3))
     chip, left, top = _stack_text(layer.size, lines, item, theme, anchor, slide, pop, int(appear * 255))
     _stamp(layer, chip, left, top)
 
@@ -638,14 +648,18 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
                           x=_num(item.get("x", DESIGN_W / 2), index, "x", -200, 1400),
                           y=_num(item.get("y", 780), index, "y", -200, 2100),
                           word_seconds=_num(item.get("word_seconds", 0.2), index, "word_seconds", 0.04, 2))
+            if item.get("overshoot") is not None:
+                parsed["overshoot"] = _num(item.get("overshoot"), index, "overshoot", 0, 0.8)
         elif kind == "highlighter":
             parsed.update(duration=_seconds(item.get("duration", 0.40), index, "duration"),
+                          ease=_overlay_ease(item.get("ease"), index),
                           x=_num(item["x"], index, "x", -200, 1400),
                           y=_num(item["y"], index, "y", -200, 2100),
                           w=_num(item["w"], index, "w", 1, 1200),
                           h=_num(item["h"], index, "h", 1, 400))
         elif kind == "circle":
             parsed.update(duration=_seconds(item.get("duration", 0.80), index, "duration"),
+                          ease=_overlay_ease(item.get("ease"), index),
                           cx=_num(item.get("cx", item.get("x")), index, "cx", -200, 1400),
                           cy=_num(item.get("cy", item.get("y")), index, "cy", -200, 2100),
                           r=_num(item["r"], index, "r", 4, 800),
@@ -657,9 +671,11 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
             parsed["points"] = [(_num(p[0], index, "x", -200, 1400), _num(p[1], index, "y", -200, 2100)) for p in points]
             parsed["duration"] = _seconds(item.get("duration", 0.50), index, "duration")
             parsed["width"] = _num(item.get("width", 8), index, "width", 1, 40)
+            parsed["ease"] = _overlay_ease(item.get("ease"), index)
         if kind in ("strike", "mask", "stamp"):
             parsed.update(
                 duration=_seconds(item.get("duration", 0.4), index, "duration"),
+                ease=_overlay_ease(item.get("ease"), index),
                 x=_num(item.get("x", 80), index, "x", -200, 1400),
                 y=_num(item.get("y", 400), index, "y", -200, 2100),
                 w=_num(item.get("w", 400), index, "w", 4, 1200),
@@ -687,6 +703,13 @@ def _metrics_or_raise(camera, index, style):
 def _unit(value, index, name) -> float:
     number = _num(value, index, name, 0, 1)
     return number
+
+
+def _overlay_ease(value, index: int) -> str:
+    name = "linear" if value is None else str(value)
+    if name not in EASES or name == "cubic-bezier":
+        raise EpisodeError(f"scene {index}: overlay ease must be a named track ease")
+    return name
 
 
 def _seconds(value, index, name) -> float:

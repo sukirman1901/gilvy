@@ -619,3 +619,123 @@ scenes:
     assert red_x(late) - red_x(early) > 15
     # The strike has drawn by the end and the stamp has settled smaller.
     assert early.shape == late.shape
+
+
+def _ink(frame, kind: str) -> int:
+    if kind == "mark":
+        mask = (frame[:, :, 0] > 140) & (frame[:, :, 1] > 120) & (frame[:, :, 2] < 80)
+    else:
+        mask = frame.mean(axis=2) > 180
+    return int(mask.sum())
+
+
+def _overlay_frame(tmp, monkeypatch, body, plate="red"):
+    tmp.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(render, "theme_for", lambda ep: _theme())
+    episode = load_episode(_write(tmp, body, plate))
+    scene = {
+        "type": "image", "params": episode.scenes[0].params, "vo": "", "caption": ["mark"],
+        "key": [], "style": "history-story",
+    }
+    return render_image_frame(_theme(), scene, 0.5, 1.2, str(tmp))
+
+
+def test_highlighter_ease_in_is_slower_than_linear_at_halfway(tmp_path, monkeypatch):
+    shared = """
+name: mark
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["mark"]
+    min: 1.2
+    image: plate.png
+    grade: none
+    grain: 0
+    camera:
+      from: {{scale: 1.0}}
+      to: {{scale: 1.04}}
+    overlays:
+      - kind: highlighter
+        x: 40
+        y: 200
+        w: 240
+        h: 36
+        at: 0
+        duration: 1.0
+        ease: {ease}
+"""
+    linear = _ink(_overlay_frame(tmp_path / "lin", monkeypatch, shared.format(ease="linear")), "mark")
+    curved = _ink(_overlay_frame(tmp_path / "in", monkeypatch, shared.format(ease="easeInCubic")), "mark")
+    # easeInCubic(0.5) is 0.125, so the sweep is about a quarter of the linear bar.
+    assert curved < linear * 0.4
+    assert curved > 10
+
+
+def test_pop_overshoot_draws_a_larger_mark(tmp_path, monkeypatch):
+    def body(overshoot):
+        extra = "" if overshoot is None else f"\n        overshoot: {overshoot}"
+        return f"""
+name: pop
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["pop"]
+    min: 1.2
+    image: plate.png
+    grade: none
+    grain: 0
+    camera:
+      from: {{scale: 1.0}}
+      to: {{scale: 1.04}}
+    overlays:
+      - kind: text
+        text: POP
+        entrance: pop
+        at: 0.4
+        size: 72
+        font: sans
+        color: [255, 255, 255]
+        x: 40
+        y: 180{extra}
+"""
+    # local = 0.5 - 0.4 = 0.10, halfway through the 0.20s pop.
+    small = _ink(_overlay_frame(tmp_path / "a", monkeypatch, body(0.05), "red"), "text")
+    large = _ink(_overlay_frame(tmp_path / "b", monkeypatch, body(0.55), "red"), "text")
+    assert large > small * 1.15
+
+
+def test_eased_dissolve_may_last_four_seconds(tmp_path):
+    path = _write(tmp_path, """
+name: long
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["long"]
+    min: 4.5
+    image: plate.png
+    grade: none
+    grain: 0
+    transition_out: dissolve
+    transition: 3.7
+    transition_ease: easeInCubic
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.04}
+  - type: image
+    caption: ["next"]
+    min: 1.2
+    image: plate.png
+    grade: none
+    grain: 0
+    camera:
+      from: {scale: 1.04}
+      to: {scale: 1.0}
+""")
+    episode = load_episode(path)
+    assert episode.scenes[0].params["transition"] == 3.7
+    path.write_text(path.read_text().replace("transition: 3.7", "transition: 4.1"), encoding="utf-8")
+    with pytest.raises(EpisodeError, match="4.0"):
+        load_episode(path)
