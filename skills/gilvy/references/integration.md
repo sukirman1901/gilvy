@@ -8,6 +8,6 @@ Core installation uses Python >=3.11 and FFmpeg/ffprobe. From an acquired reposi
 
 For OpenCode use its current MCP configuration instructions. A local server command is an argument array `["/absolute/venv/bin/gilvy", "mcp"]`; no shell activation is required. `opencode mcp add gilvy --global -- /absolute/venv/bin/gilvy mcp` registers it. Check connection status; preserve unrelated configuration.
 
-Inspect `gilvy --help` and available MCP tools for capability/doctor support. If unavailable, verify interpreter, FFmpeg/ffprobe, optional packages and bundled resources explicitly. Report unavailable/unverified capabilities rather than trying unsupported commands repeatedly.
+Run `gilvy doctor --json` or MCP `doctor` for read-only prerequisite discovery. It reports optional packages and model file presence separately from runtime readiness; inference remains unverified until separately exercised. On older installations without doctor, verify interpreter, FFmpeg/ffprobe, optional packages and bundled resources explicitly. Report unavailable/unverified capabilities rather than trying unsupported commands repeatedly.
 
 Use fresh output directories for previews/analysis that require them. Keep approved source and artifact versions. Job states belong to the running process unless its documented contract says otherwise; a process restart is not an automatic resume. Never claim a queued render has completed.

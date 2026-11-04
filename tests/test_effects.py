@@ -113,8 +113,24 @@ scenes:
             - {{t: 0.0, v: 1.0, ease: {ease}}}
             - {{t: 1.2, v: 1.35, ease: linear}}
 """)
-    assert result["qc"]["ok"], result["qc"]
-    shot = detect_shot(video)
+    if ease == "linear":
+        assert result["qc"]["ok"], result["qc"]
+        assert result["published"] is True
+        assert Path(result["video"]) == video
+    else:
+        # These exaggerated detector fixtures exceed the short-shot 40%/s
+        # peak scale-speed band (87%/s cubic, 199%/s exponential). Their
+        # endpoint-average log rate is still 25%/s and must be measurable.
+        assert result["qc"]["ok"] is False, result["qc"]
+        assert result["published"] is False
+        violations = result["qc"]["violations"]
+        assert len(violations) == 1, result["qc"]
+        assert "peak segment zoom" in violations[0]
+        assert "exceeds the plate band" in violations[0]
+        assert not video.exists()
+    artifact = Path(result["video"])
+    assert artifact.is_file()
+    shot = detect_shot(artifact)
     zoom = next(item for item in shot["events"] if item["effect"] == "zoom")
     authored = 100 * math.log(1.35) / 1.2
     assert zoom["zoom_pct_per_s"] == pytest.approx(authored, rel=0.05)
@@ -482,6 +498,7 @@ scenes:
 """)
     shot = detect_shot(video)
     times = next(item for item in shot["events"] if item["effect"] == "typewriter")["times"]
+    assert len(times) == 3
     assert times[0] == pytest.approx(0.1, abs=2 / 20)
     assert times[1] == pytest.approx(0.1 + 0.25, abs=2 / 20)
     assert times[2] == pytest.approx(0.1 + 0.50, abs=2 / 20)
@@ -896,6 +913,9 @@ scenes:
 """)
     episode = load_episode(path)
     assert episode.scenes[0].params["transition"] == 3.7
-    path.write_text(path.read_text().replace("transition: 3.7", "transition: 4.1"), encoding="utf-8")
-    with pytest.raises(EpisodeError, match="4.0"):
+    path.write_text(path.read_text().replace("transition: 3.7", "transition: 4.0"), encoding="utf-8")
+    assert load_episode(path).scenes[0].params["transition"] == 4.0
+    path.write_text(path.read_text().replace("transition: 4.0", "transition: 4.1"), encoding="utf-8")
+    with pytest.raises(EpisodeError, match=r"transition must be from 0(?:\.0)? to 4(?:\.0)?$") as exc:
         load_episode(path)
+    assert exc.value.field == "transition"

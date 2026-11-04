@@ -18,6 +18,12 @@ pip install -e ".[dev]"
 
 Poppins (SIL Open Font License) ships in `src/gilvy/fonts` with its `OFL.txt`. The rest of the project is MIT.
 
+Run `gilvy doctor --json` (MCP: `doctor`) to inspect Python, FFmpeg/ffprobe,
+bundled resources, optional packages and the local cutout model. Exit zero
+means required discovery checks passed; it does not certify network services,
+package import compatibility or model inference. The command is read-only and
+can diagnose missing rendering dependencies without importing the renderer.
+
 To fetch reference videos from supported sites or direct HTTP(S) media links,
 install the optional extra in the same environment as Gilvy/MCP:
 
