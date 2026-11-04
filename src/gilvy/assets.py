@@ -16,7 +16,7 @@ from PIL import Image, ImageFont
 
 from gilvy.errors import GilvyError
 from gilvy.collage import asset_integrity
-from gilvy.formats import DESIGN_H, DESIGN_W
+from gilvy.formats import DESIGN_H, DESIGN_W, fit_of, get_profile
 from gilvy.keyframes import track_bounds
 from gilvy.presets import PHOTO_PRESETS, STYLE_PROMPTS
 
@@ -284,6 +284,8 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
                 peak = _fragment_peak(parent, camera_size["scale"]) if parent else 1.0
                 size = {"width": math.ceil(layer["w"]*peak), "height": math.ceil(layer["h"]*peak),
                         "scale": peak, "pan_x": 0, "pan_y": 0}
+            elif layer.get("tracks"):
+                size = _unplaced_pixel_size(layer, camera_size, fit_of(get_profile(episode.format)).scale)
             if collage:
                 # The story brief is metadata, not a command to merge every noun
                 # into this one asset (e.g. a pump physically standing in a field).
@@ -364,6 +366,31 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
             "flagged": [item["src"] for item in assets if item.get("image_qc") and not item["image_qc"]["ok"]],
         },
     }
+
+
+def _unplaced_pixel_size(layer: dict, camera: dict, fit_scale: float) -> dict:
+    """Conservative envelope of legacy cover-fitted layers and their local tracks.
+
+    Track bounds include every authored segment, including episode-clock keys
+    outside the current shot and Bezier overshoot. Legacy local pans are output
+    pixels (unlike camera pans); convert them back to design pixels for sizing.
+    """
+    tracks = layer["tracks"]
+    gain = .25 + .75*layer.get("depth", 1)
+    peak = max(1, track_bounds(tracks["scale"])[1]) if tracks.get("scale") else 1
+    scale = (1 + (camera["scale"] - 1)*gain) * peak
+    pans = {}
+    for axis in ("x", "y"):
+        local = max(abs(v) for v in track_bounds(tracks[axis])) if tracks.get(axis) else 0
+        pans[axis] = camera[f"pan_{axis}"]*gain + local/fit_scale
+    width = camera["width"]/camera["scale"] - 2*camera["pan_x"]
+    height = camera["height"]/camera["scale"] - 2*camera["pan_y"]
+    if tracks.get("rotation") and any(abs(v) > 1e-8 for v in track_bounds(tracks["rotation"])):
+        width = max(width, math.hypot(DESIGN_W, DESIGN_H))
+        height = max(height, math.hypot(DESIGN_W, DESIGN_H))
+    return {"width": math.ceil((width + 2*pans["x"])*scale),
+            "height": math.ceil((height + 2*pans["y"])*scale),
+            "scale": scale, "pan_x": pans["x"], "pan_y": pans["y"]}
 
 
 def _fragment_peak(layer: dict, camera_scale: float) -> float:

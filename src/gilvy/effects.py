@@ -22,6 +22,20 @@ KINDS = (
 )
 SFX = {"click", "whoosh", "stamp"}
 
+# Numeric fields: default, inclusive lower bound, inclusive upper bound.
+_NUMERIC = {
+    "shake": {"amp": (2.4, 0, 40), "freq": (10, .5, 30)},
+    "whip": {"seconds": (.12, .04, .5), "at": (0, 0, 30)},
+    "flash": {"at": (.2, 0, 30), "seconds": (.06, .02, .4)},
+    "wipe": {"at": (0, 0, 30), "seconds": (.4, .05, 2.5)},
+    "glitch": {"at": (.3, 0, 30), "seconds": (.08, .02, .4)},
+    "flicker": {"amount": (.08, 0, .5), "freq": (12, 1, 30)},
+    "vignette": {"amount": (.45, 0, 1)},
+    "light_leak": {"amount": (.35, 0, 1)},
+    "dust": {"amount": (.5, 0, 1)},
+    "rotation": {"degrees": (0, -45, 45)},
+}
+
 
 def parse_effects(raw, index: int) -> list[dict]:
     if raw is None:
@@ -36,43 +50,20 @@ def parse_effects(raw, index: int) -> list[dict]:
             )
         kind = item["kind"]
         parsed = {"kind": kind}
-        if kind == "shake":
-            parsed["amp"] = _num(item.get("amp", 2.4), 0, 40)
-            parsed["freq"] = _num(item.get("freq", 10), 0.5, 30)
-        elif kind == "whip":
-            parsed["seconds"] = _num(item.get("seconds", 0.12), 0.04, 0.5)
-            parsed["at"] = _num(item.get("at", 0.0), 0, 30)
-        elif kind == "flash":
-            parsed["at"] = _num(item.get("at", 0.2), 0, 30)
-            parsed["seconds"] = _num(item.get("seconds", 0.06), 0.02, 0.4)
-        elif kind == "wipe":
-            parsed["at"] = _num(item.get("at", 0.0), 0, 30)
-            parsed["seconds"] = _num(item.get("seconds", 0.4), 0.05, 2.5)
+        for name, (default, lo, hi) in _NUMERIC[kind].items():
+            parsed[name] = _num(item.get(name, default), lo, hi,
+                                field=f"scenes[{index - 1}].effects[{i}].{name}")
+        if kind == "wipe":
             parsed["ease"] = str(item.get("ease") or "easeInCubic")
             parsed["axis"] = item.get("axis") if item.get("axis") in ("x", "y") else "x"
-        elif kind == "glitch":
-            parsed["at"] = _num(item.get("at", 0.3), 0, 30)
-            parsed["seconds"] = _num(item.get("seconds", 0.08), 0.02, 0.4)
-        elif kind == "flicker":
-            parsed["amount"] = _num(item.get("amount", 0.08), 0, 0.5)
-            parsed["freq"] = _num(item.get("freq", 12), 1, 30)
-        elif kind == "vignette":
-            parsed["amount"] = _num(item.get("amount", 0.45), 0, 1)
-        elif kind == "light_leak":
-            parsed["amount"] = _num(item.get("amount", 0.35), 0, 1)
-        elif kind == "dust":
-            parsed["amount"] = _num(item.get("amount", 0.5), 0, 1)
-        elif kind == "rotation":
-            parsed["degrees"] = _num(item.get("degrees", 0), -45, 45)
         out.append(parsed)
     return out
 
 
-def _num(value, lo: float, hi: float) -> float:
-    number = float(value)
-    if not math.isfinite(number) or not lo <= number <= hi:
-        raise EpisodeError(f"effect value {value} must be from {lo} to {hi}")
-    return number
+def _num(value, lo: float, hi: float, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not lo <= value <= hi:
+        raise EpisodeError(f"{field} must be a finite number from {lo} to {hi}", field=field)
+    return float(value)
 
 
 def shake_offset(effect: dict, time: float) -> tuple[float, float]:
