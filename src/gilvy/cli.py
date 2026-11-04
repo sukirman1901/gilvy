@@ -234,6 +234,9 @@ def run(argv: list[str] | None = None) -> int:
     sub.add_parser("elements", help="list composable visual elements and their verbs")
     sub.add_parser("motion-reference", help="read visual vocabulary and Bojonegoro motion study")
     sub.add_parser("reference-styles", help="measured vox-explainer and history-story directing guide")
+    cutout = sub.add_parser("cutout", help="split one photo into a foreground cut-out and a filled background")
+    cutout.add_argument("image")
+    cutout.add_argument("--out", "-o", required=True, help="directory for fg.png and bg.png")
     assets = sub.add_parser("assets", help="list image plates an episode must generate before render")
     assets.add_argument("episode")
     assets.add_argument("--reference", help="local video; extract style reference frames and QC plates against them")
@@ -289,6 +292,17 @@ def run(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "reference-styles":
             print(Path(__file__).resolve().parent.joinpath("REFERENCE_STYLES.md").read_text(encoding="utf-8"))
+            return 0
+        if args.command == "cutout":
+            from PIL import Image
+            from gilvy.voxlook import cutout_subject
+            dest = Path(args.out).expanduser()
+            dest.mkdir(parents=True, exist_ok=True)
+            with Image.open(args.image) as opened:
+                foreground, background = cutout_subject(opened)
+            foreground.save(dest / "fg.png")
+            background.save(dest / "bg.png")
+            print(json.dumps({"foreground": str(dest / "fg.png"), "background": str(dest / "bg.png")}, indent=2))
             return 0
         if args.command == "assets":
             episode = load_episode(args.episode)

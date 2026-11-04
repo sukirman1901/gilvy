@@ -28,3 +28,20 @@ transition:
   kind: dissolve
   seconds: 1.46
   ease: easeInCubic
+# Photographic look. Overlays: headline (serif), tag (orange label),
+# chip (white sans, one word on a red box), card (tilted, shadowed).
+# `gilvy cutout photo.jpg --out dir` writes fg.png and bg.png for parallax.
+# A scene may set backdrop: cork instead of a full-bleed plate.
+look:
+  palette:
+    red: "#e2372d"
+    orange: "#f27a2a"
+    sky: "#56b0e8"
+    white: "#ffffff"
+    ink: "#141414"
+  headline: {font: serif, size: 108, color: "#ffffff"}
+  tag: {fill: "#f27a2a", font: sans, color: "#ffffff"}
+  chip: {font: sans, color: "#ffffff", highlight: "#e2372d"}
+  card: {tilt: 8, shadow: 0.55}
+  backdrop: cork
+  cutout: rembg
