@@ -60,6 +60,10 @@ A scene is a type from the library (`bowl_hook`, `coin_drop`, `ring_drain`, `com
 - `examples/custom.yaml` — the escape hatch
 - `examples/reflection.yaml` — an offline caption-and-ambient metaphor, no numerical beat or CTA
 
+See [the examples index](examples/README.md) for each sample's purpose, test or
+guide dependencies, and which files are procedural diagnostics rather than
+visual design references.
+
 Voice, language, output path, palette, and font directory are fields on the episode. Nothing is monkeypatched.
 
 ## Visual elements and approved motion study
