@@ -1,0 +1,240 @@
+# Bahasa Indonesia, 9:16, senyap. Piring gambar mengikuti templates/vox.yaml:
+# gaya vox-explainer, dorong dan tarik pelan, geser, pecut, larut,
+# potong-cocok, warna bergerak, grain_std, teks pop, dan stabilo.
+# Piringnya gambar jadian, bukan foto arsip.
+#
+#   gilvy render examples/bykirman/garam.yaml --tts fixture --out out/bykirman-garam.mp4
+#   gilvy preview examples/bykirman/garam.yaml --tts fixture --out out/bykirman-garam-preview
+#   gilvy qc out/bykirman-garam.mp4
+
+name: bykirman-garam
+language: id-ID
+style: vox-explainer
+audio_mode: silent
+version: 1
+
+scenes:
+  - id: tambak
+    type: image
+    caption: ["garam mulai", "di tambak."]
+    key: ["tambak."]
+    min: 4.2
+    show_caption: true
+    image: plates/tambak.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 0}
+      to: {scale: 1.12, x: 0, y: 0}
+    transition_out: cut
+    overlays:
+      - kind: text
+        text: TAMBAK
+        entrance: pop
+        overshoot: 0.16
+        at: 0.35
+        hold: 2.6
+        font: sans
+        size: 72
+        color: [236, 228, 210]
+        x: 180
+        y: 420
+
+  - id: pantai
+    type: image
+    caption: ["angin mengeringkan", "air laut."]
+    key: ["mengeringkan"]
+    min: 4.0
+    show_caption: true
+    image: plates/pantai.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      tracks:
+        - property: scale
+          keys:
+            - {t: 0.0, v: 1.0, ease: linear}
+            - {t: 4.0, v: 1.04, ease: linear}
+        - property: x
+          keys:
+            - {t: 0.0, v: -24, ease: easeOutCubic}
+            - {t: 4.0, v: 28, ease: linear}
+    transition_out: cut
+
+  - id: karung
+    type: image
+    caption: ["karung meluncur", "ke gudang."]
+    key: ["meluncur"]
+    min: 3.6
+    show_caption: true
+    image: plates/karung.png
+    grade: none
+    grain: 0
+    paper: 0
+    effects:
+      - {kind: whip, at: 0.95, seconds: 0.28}
+    camera:
+      tracks:
+        - property: scale
+          keys:
+            - {t: 0.0, v: 1.0, ease: linear}
+            - {t: 3.6, v: 1.08, ease: linear}
+        - property: y
+          keys:
+            - {t: 0.0, v: 0, ease: linear}
+            - {t: 0.9, v: 0, ease: linear}
+            - {t: 1.2, v: 70, ease: expoOut}
+            - {t: 3.6, v: 70, ease: linear}
+    transition_out: cut
+
+  - id: pasar
+    type: image
+    caption: ["pasar menimbang", "butir garam."]
+    key: ["menimbang"]
+    min: 4.0
+    show_caption: true
+    image: plates/pasar.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 6}
+      to: {scale: 1.05, x: 0, y: -8}
+    transition_out: dissolve
+    transition: 1.2
+    transition_ease: easeInCubic
+
+  - id: koin
+    type: image
+    caption: ["satu koin,", "satu mangkuk."]
+    key: ["koin,", "mangkuk."]
+    min: 3.8
+    show_caption: true
+    image: plates/koin.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 0}
+      to: {scale: 1.06, x: 0, y: 0}
+    transition_out: match
+    transition: 0.55
+    match:
+      tracks:
+        - property: scale
+          keys:
+            - {t: 0.0, v: 1.0, ease: easeInCubic}
+            - {t: 0.55, v: 1.22, ease: linear}
+        - property: x
+          keys:
+            - {t: 0.0, v: 0, ease: easeOutCubic}
+            - {t: 0.55, v: 48, ease: linear}
+
+  - id: mangkuk
+    type: image
+    caption: ["mangkuk menerima", "koin itu."]
+    key: ["menerima"]
+    min: 3.6
+    show_caption: true
+    image: plates/mangkuk.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.04, x: 8, y: 0}
+      to: {scale: 1.08, x: 0, y: 0}
+    transition_out: cut
+
+  - id: musim
+    type: image
+    caption: ["warna ikut", "musim kering."]
+    key: ["kering."]
+    min: 4.0
+    show_caption: true
+    image: plates/musim.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.0, x: 0, y: 0}
+      to: {scale: 1.04, x: 10, y: 0}
+    color:
+      tracks:
+        - property: hue
+          keys:
+            - {t: 0.0, v: 0, ease: easeInOutCubic}
+            - {t: 4.0, v: 14, ease: linear}
+        - property: sat
+          keys:
+            - {t: 0.0, v: 1.0, ease: linear}
+            - {t: 4.0, v: 1.12, ease: linear}
+    transition_out: cut
+
+  - id: arsip
+    type: image
+    caption: ["arsip tua", "tetap terbaca."]
+    key: ["terbaca."]
+    min: 4.2
+    show_caption: true
+    image: plates/arsip.png
+    grade: paper
+    grain: 0
+    grain_std: 6
+    paper: 0.08
+    camera:
+      ease: linear
+      from: {scale: 1.08, x: 0, y: 8}
+      to: {scale: 1.0, x: 0, y: -6}
+    transition_out: cut
+
+  - id: garis
+    type: image
+    caption: ["garis ini", "perlu diingat."]
+    key: ["diingat."]
+    min: 4.0
+    show_caption: true
+    image: plates/arsip.png
+    grade: paper
+    grain: 0
+    grain_std: 4
+    paper: 0.06
+    camera:
+      tracks:
+        - property: y
+          keys:
+            - {t: 0.0, v: 8, ease: linear}
+            - {t: 4.0, v: -28, ease: linear}
+    transition_out: cut
+    overlays:
+      - kind: highlighter
+        x: 150
+        y: 700
+        w: 760
+        h: 48
+        at: 0.45
+        duration: 0.9
+        ease: easeOutCubic
+        color: [176, 140, 48]
+
+  - id: dapur
+    type: image
+    caption: ["garam sampai", "ke dapur."]
+    key: ["dapur."]
+    min: 4.0
+    show_caption: true
+    image: plates/dapur.png
+    grade: none
+    grain: 0
+    paper: 0
+    camera:
+      ease: linear
+      from: {scale: 1.10, x: 0, y: 0}
+      to: {scale: 1.0, x: 0, y: 0}
+    transition_out: cut
