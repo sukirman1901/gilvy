@@ -84,7 +84,7 @@ def _gray_frames(source: Path, dimensions: tuple[int, int]) -> tuple[np.ndarray,
 
 
 def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -> list[dict]:
-    """Cross-dissolves: change spread across 0.25–0.8s that matches a linear blend.
+    """Cross-dissolves: change spread across 0.25–2.0s that matches a linear blend.
 
     A one-frame jump stays a hard cut. Thresholds were checked against the
     attached history short: joins near 9.0s and 14.6s match; the 5.68s join
@@ -112,7 +112,9 @@ def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -
             span = (ib - ia) / fps
             if span < 0.25:
                 continue
-            if span > 0.80:
+            # Photo dissolves may run to 2.0s. The old 0.80s ceiling cut a 1.4s
+            # blend off before the 10%–90% clock (1.12s) could even be reported.
+            if span > 2.0:
                 break
             t0, t1 = ia / fps, ib / fps
             if any(t0 + 0.06 < cut < t1 - 0.06 for cut in hard_times):
@@ -139,7 +141,14 @@ def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -
             if ratio > 0.42 or (end < 28 and ratio > 0.22):
                 continue
             found.append((1 - ratio, t0, t1, end))
-    found.sort(reverse=True)
+    # A tight linear blend is expanded to its longest passing span. The single
+    # best score sits on the 10%–90% core (a 1.4s dissolve reads as 1.1s).
+    # Weaker candidates stay, so a softer join is not dropped for a tighter one elsewhere.
+    tight = [row for row in found if row[0] >= 0.95]
+    rest = [row for row in found if row[0] < 0.95]
+    tight.sort(key=lambda row: ((row[2] - row[1]), row[0]), reverse=True)
+    rest.sort(reverse=True)
+    found = tight + rest
     chosen = []
     for score, t0, t1, end in found:
         if any(not (t1 < row["start"] - 0.05 or t0 > row["end"] + 0.05) for row in chosen):

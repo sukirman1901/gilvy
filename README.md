@@ -154,7 +154,9 @@ missing. Generate the art outside the repo. Do not commit frames from the
 reference. Samples under `examples/styles/` use procedural stand-in plates.
 MCP `asset_manifest` takes the same optional reference. `history-story` uses pad/lead 0, no intro fade, exponential zoom up to about
 26%/s, stacked emphasis type, and sepia from `#1a1411` to `#ead0b3`. Pan does
-not raise the zoom: the window shifts, and a short plate repeats its edge.
+not raise the zoom: the window shifts, and a short plate repeats its edge. A
+plate larger than the frame keeps that margin. A linear dissolve's 10%–90%
+clock is 80% of the authored overlap.
 Optional `music` is ducked under the voice and normalized to the preset loudness
 (`-21` LUFS). `vo_overrun: true` lets a long line play into the next shot;
 otherwise QC warns that later cuts moved, and an overrun that overlaps the next
