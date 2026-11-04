@@ -85,8 +85,11 @@ def test_catalog_cli_mcp_and_packaged_guide_agree(capsys):
     for name in NAMES:
         assert f'`{name}`' in guide
     skill=(ROOT/'skills/gilvy/SKILL.md').read_text()
-    section=skill.split('<!-- directing:start -->')[1].split('<!-- directing:end -->')[0].strip()
-    assert section==(ROOT/'src/gilvy/DIRECTING.md').read_text().strip()
+    assert 'references/house.md' in skill and 'directing_notes' in skill
+    house=(ROOT/'skills/gilvy/references/house.md').read_text()
+    assert 'directing_notes' in house and 'list_scene_types' in house
+    from gilvy.mcp_server import directing_notes
+    assert directing_notes().strip()==(ROOT/'src/gilvy/DIRECTING.md').read_text().strip()
 
 
 def test_examples_preflight_and_bojonegoro_preserves_rounded_population():

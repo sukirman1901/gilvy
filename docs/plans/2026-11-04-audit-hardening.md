@@ -24,4 +24,23 @@ Baseline suite completed: 246 passed, 3 failed, 2 skipped in 607.80s. Additional
 Installation evidence: global CLI symlink added; download/cutout extras installed with Intel-compatible numba 0.61.2 / llvmlite 0.44.0. Imports verified; real u2net CPU cutout inference succeeded with 128x128 RGBA output. Record compatibility constraints in integration work.
 
 ## Boundaries
+
+## Review loop in progress
+- Initial engine/skill checkpoint: `1d742cb`; integration with `ad76ea9` delegated to the engine writer.
+- Static spec review supported F3/F4/F5/F7/F8/F9 but identified remaining F1 publication aliases/shared writer ownership/intermediate-name collision, F2 deferred narrated camera validation, and F6 malformed track/nonfinite count validation. These are regression requirements, not closed findings.
+- Isolated detector writer owns only detect.py and detector tests/report; isolated capability writer owns capabilities.py, cli.py and dedicated tests/report. Neither commits. Engine writer retains merge/source ownership elsewhere and stages explicit files.
+- After handoff: add shared MCP diagnostics wrapper, review integrated changes, run full suite and fresh stdio smoke, record precise optional/external skips.
+- Merge checkpoint `08fa79a` completed. Capability checkpoint `46506de` completed; controller reran 8 capability tests successfully. Fresh stdio smoke discovered 23 tools and passed doctor/catalog/invalid-input/recovery contracts. `uv pip check --python .venv/bin/python` checked 76 packages successfully (venv intentionally lacks pip).
+- Independent integrated review executed 47 focused regressions successfully, but confirmed three remaining issues: product metadata alias overwrites input spec, malformed effect numeric values escape structured errors, and unplaced collage-layer tracks are omitted from asset sizing. Engine writer assigned another RED/GREEN repair loop; these findings remain OPEN until verified.
+
+## Completion boundary
+
+## Final verification and publication
+- Full repository run: 505 passed, 1 failed, 2 skipped in 804.07s. The sole failure was an obsolete `test_elements.py` assertion requiring inline directing markers after the approved portable skill router change.
+- Updated that assertion to verify the bundled house route and equality of MCP directing notes with the canonical packaged guide. Reran complete elements, skill-package and CLI files: **37 passed in 41.05s**. No production code changed after the full run; this is full-run evidence plus a focused corrective rerun, not a second all-green full-suite run.
+- Skips: external ref3 upload unavailable; missing-rembg-environment test inapplicable because rembg is installed. One Pillow deprecation warning remains.
+- Independent detector review: 20 regression tests passed, no actionable findings; implementation worker completed all 49 detector/effects tests without skips/xfails. Independent final engine closure: 128 tests passed, all three follow-up findings closed.
+- Fresh MCP smoke passed all contracts with 23 tools. Global CLI doctor succeeds outside checkout. Dependency metadata check passed for 76 packages.
+- User explicitly authorized GitHub PR and merge. Publication follows these recorded checks; no creative video approval or live-service reliability claim is implied.
+
 Resolve audited defects and integration/skill readiness. AE parity (full 3D, 4K, multitrack editor, GPU/browser renderer) remains an explicitly documented roadmap, not a fabricated completion claim. Optional extras must either be installed and validated or reported unavailable by capabilities with an actionable reason.
