@@ -144,3 +144,9 @@ Technical QC checks the output's integrity and style constraints. It does not as
 ## 7. Then the usual production pass
 
 Choose audio mode first: `voiceover` (default), `ambient`, or `silent`. For voiceover, write the spoken line before the caption and time against the actual voice. For ambient/silent, set explicit scene `min` durations for reading; TTS is not called. Keep captions under five words per line, keys copied exactly, inspect stills, watch the motion proof, render, then run technical QC. Diagnose the reported failure; fix episode inputs or custom scene logic as appropriate, rather than changing the locked drawing engine.
+
+## 8. Opt-in photo presets
+
+The sections above are the house explainer. The camera stays still, and the picture is drawn.
+
+`style: vox-explainer` and `style: history-story` are opt-in exceptions for photographic and painterly plates. They do not change a house episode. Read `reference_styles` before writing one. Those episodes use `type: image` for Ken Burns, parallax layers, dissolves, grade, and overlays. Do not fake them by zooming a house scene.

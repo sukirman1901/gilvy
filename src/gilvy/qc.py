@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from gilvy.errors import GilvyError
+from gilvy.presets import PHOTO_PRESETS, RULES, camera_problem
 
 MAX_GREEN = 0.40
 MAX_NONE_GREEN = 0.012
@@ -81,6 +82,31 @@ class QCReport:
         for item in self.violations:
             lines.append(f"- {item}")
         return "\n".join(lines)
+
+
+def _preset_conformance(report: QCReport, meta: dict) -> None:
+    """Shot length and plate speed for opt-in image presets. House timelines skip this."""
+    style = str(meta.get("style") or "house")
+    if style not in PHOTO_PRESETS:
+        return
+    rules = RULES[style]
+    for scene in meta.get("scenes") or []:
+        if scene.get("type") != "image":
+            continue
+        label = f"scene {int(scene.get('index', 0)) + 1} ({scene.get('id') or 'image'})"
+        duration = float(scene["duration"])
+        if not rules["shot_min"] <= duration <= rules["shot_max"]:
+            report.violations.append(
+                f"{label} is {duration:.2f}s, outside the {style} shot range "
+                f"{rules['shot_min']:.2f}–{rules['shot_max']:.2f}s"
+            )
+        camera = scene.get("camera")
+        if not camera:
+            report.violations.append(f"{label} is an image plate with no camera move recorded")
+            continue
+        problem = camera_problem(camera, rules, label)
+        if problem:
+            report.violations.append(problem)
 
 
 def green_parts(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -357,6 +383,7 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
                 report.violations.append(f"{label} has green in the caption. Key words stay white.")
             if is_blank(frame):
                 report.violations.append(f"{label} is blank at {t:.2f}s, when the scene should be readable")
+        _preset_conformance(report, meta)
 
     # The scan can record the same overflow at several timestamps. Keep the first of each wording.
     deduped = []

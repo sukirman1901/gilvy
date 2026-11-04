@@ -48,7 +48,11 @@ mcp = FastMCP(
         "Inspect all motion clips before describing its style; titles and stills are insufficient. "
         "Keep observed facts separate from inferred camera/easing/layers; no source layers are recovered. "
         "House rules constrain authored episodes, not descriptions of supplied references. "
-        "Green is one quantity. Captions stay white. Do not restyle the canvas."
+        "Green is one quantity. Captions stay white. Do not restyle the canvas. "
+        "Opt-in style: vox-explainer and style: history-story are image-plate exceptions. "
+        "Call reference_styles, then asset_manifest, generate every missing plate, then render and qc. "
+        "analyze_reference also lists soft_transitions (dissolve candidates). They do not split scenes "
+        "until you pass scene_boundaries."
     ),
 )
 
@@ -246,7 +250,8 @@ def analyze_reference(video_path: str, output_dir: str, threshold: float = .3,
                       clip_seconds: float = 8, width: int = 640) -> str:
     """Extract a local reference video (<=10min) into evidence, not recovered animation code.
 
-    Creates candidate cuts, timestamped frames, contact sheets, full-coverage motion
+    Creates candidate cuts, dissolve candidates (soft_transitions; they do not
+    split scenes), timestamped frames, contact sheets, full-coverage motion
     clips with .25s transition handles and original audio, a JSON manifest and a
     review worksheet. output_dir must not exist. None detects cuts; a sorted list
     of interior seconds overrides detection; [] keeps one scene. Long scenes are
@@ -261,6 +266,7 @@ def analyze_reference(video_path: str, output_dir: str, threshold: float = .3,
         return json.dumps({"ok": True, "manifest": result["manifest"], "review": result["review"],
                            "contact_sheets": result["contact_sheets"], "scene_count": len(result["scenes"]),
                            "clip_count": sum(len(s["clips"]) for s in result["scenes"]),
+                           "soft_transitions": result.get("soft_transitions") or [],
                            "creative_review": "required", "limitations": result["limitations"]})
     except GilvyError as exc:
         return _fail(exc)
@@ -337,6 +343,30 @@ def list_visual_elements() -> str:
     environmental symbols do not establish causal claims or measured data.
     """
     return json.dumps(element_catalog())
+
+
+@mcp.tool()
+def reference_styles() -> str:
+    """Measured directing guide for style: vox-explainer and style: history-story.
+
+    House episodes stay on directing_notes. These presets are opt-in image plates.
+    Every number in the guide is tagged measured, observed, inferred, or uncertain.
+    """
+    return (_DIRECTING.parent / "REFERENCE_STYLES.md").read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def asset_manifest(episode_path: str) -> str:
+    """List image plates an episode must generate before render, with style prompts.
+
+    Missing files are listed and render_video fails until they exist. This does
+    not generate images and does not copy frames from a reference video.
+    """
+    from gilvy.assets import build_manifest
+    try:
+        return json.dumps({"ok": True, **build_manifest(load_episode(episode_path))})
+    except GilvyError as exc:
+        return _fail(exc)
 
 
 @mcp.tool()

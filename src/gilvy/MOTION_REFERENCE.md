@@ -27,6 +27,9 @@ List the same registry with `gilvy elements` or MCP `list_visual_elements`.
 These names are **not YAML scene types**. Use them inside a `python` scene.
 They compose the unchanged Ctx primitives, palette, stroke language, and fit.
 No photos, detailed faces, random particles, bounce, or camera motion.
+Photographic plates and camera moves are not part of this vocabulary.
+They belong to the opt-in episode presets `vox-explainer` and `history-story`
+(`gilvy reference-styles`). A house episode still keeps a still camera.
 
 ## API
 

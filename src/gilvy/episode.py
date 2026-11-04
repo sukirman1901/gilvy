@@ -11,6 +11,8 @@ import yaml
 
 from gilvy.errors import EpisodeError
 from gilvy.formats import get_profile
+from gilvy.image_scene import parse_image_params
+from gilvy.presets import HOUSE, PRESETS, RULES
 from gilvy.scenes import DOT_CAP, SCENES
 from gilvy.theme import BG, GREEN, MIN_DURATION, WHITE
 
@@ -44,6 +46,8 @@ class Scene:
             return self.green
         if self.type == "python":
             return "any"
+        if self.type == "image":
+            return "none"
         return SCENES[self.type].green
 
 
@@ -64,6 +68,7 @@ class Episode:
     green: tuple[int, int, int] = GREEN
     format: str = "vertical_9x16"
     audio_mode: str = "voiceover"
+    style: str = HOUSE
 
     def with_format(self, name: str) -> Episode:
         get_profile(name)
@@ -117,7 +122,7 @@ def _keys(raw, lines: list[str], index: int) -> list[str]:
     return list(raw)
 
 
-def _scene(raw, index: int, audio_mode: str = "voiceover") -> Scene:
+def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE) -> Scene:
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index} must be a mapping")
     typ = raw.get("type")
@@ -152,6 +157,15 @@ def _scene(raw, index: int, audio_mode: str = "voiceover") -> Scene:
     if typ == "python":
         if not isinstance(entry, str) or ":" not in entry:
             raise EpisodeError(f"scene {index}: python scenes need entry: file.py:function")
+    elif typ == "image":
+        params = parse_image_params(raw, index, style)
+        if minimum is not None:
+            rules = RULES[style]
+            if not rules["shot_min"] <= minimum <= rules["shot_max"]:
+                raise EpisodeError(
+                    f"scene {index}: min {minimum:.2f}s is outside the {style} shot range "
+                    f"{rules['shot_min']:.2f}–{rules['shot_max']:.2f}s"
+                )
     elif typ not in SCENES:
         known = ", ".join([*SCENES.keys(), "python"])
         raise EpisodeError(f"scene {index}: unknown type {typ!r}. Known types: {known}")
@@ -188,6 +202,9 @@ def load_episode(path: str | Path) -> Episode:
     audio_mode = str(data.get("audio_mode", "voiceover"))
     if audio_mode not in {"voiceover", "ambient", "silent"}:
         raise EpisodeError("audio_mode must be voiceover, ambient, or silent")
+    style = str(data.get("style") or HOUSE)
+    if style not in PRESETS:
+        raise EpisodeError("style must be house, vox-explainer, or history-story")
     language = str(data.get("language") or "en-US")
     voice = data.get("voice") or _VOICES.get(language, "")
     if not isinstance(voice, str) or (audio_mode == "voiceover" and not voice.strip()):
@@ -201,7 +218,7 @@ def load_episode(path: str | Path) -> Episode:
     raw_scenes = data.get("scenes")
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise EpisodeError("scenes must be a non-empty list")
-    scenes = [_scene(item, i + 1, audio_mode) for i, item in enumerate(raw_scenes)]
+    scenes = [_scene(item, i + 1, audio_mode, style) for i, item in enumerate(raw_scenes)]
     poster = data.get("poster")
     if poster is not None:
         if isinstance(poster, bool) or not isinstance(poster, int) or not 0 <= poster < len(scenes):
@@ -249,6 +266,7 @@ def load_episode(path: str | Path) -> Episode:
         green=green,
         format=delivery,
         audio_mode=audio_mode,
+        style=style,
     )
 
 
