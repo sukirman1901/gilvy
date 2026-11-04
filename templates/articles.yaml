@@ -1,0 +1,29 @@
+# Reusable vox-explainer template for the articles short (ref2).
+# The 140% punch is the shot that runs 100% to 140% with an ease-out.
+# Zoom rates in the replica table are log rates of these endpoints.
+name: articles
+style: vox-explainer
+effects:
+  - shake
+  - flash
+  - dissolve
+camera:
+  ease: expoIn
+  scale_max: 2.4
+  tracks:
+    - property: scale
+      keys:
+        - {t: 0.0, v: 1.0, ease: easeOutQuad}
+        - {t: 1.375, v: 1.40, ease: linear}
+    - property: x
+      keys:
+        - {t: 0.0, v: 0, ease: expoOut}
+        - {t: 1.25, v: -19.5, ease: linear}
+    - property: y
+      keys:
+        - {t: 0.0, v: 0, ease: expoOut}
+        - {t: 1.25, v: -70, ease: linear}
+transition:
+  kind: dissolve
+  seconds: 0.709
+  ease: easeInCubic

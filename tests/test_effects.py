@@ -526,6 +526,30 @@ def test_vox_replica_table_records_the_check():
     assert failed == []
 
 
+def test_ref2_and_ref3_replica_tables_pass():
+    for name in ("ref2_replica_table.json", "ref3_replica_table.json"):
+        data = json.loads((ROOT / "tests" / "fixtures" / name).read_text(encoding="utf-8"))
+        rows = data["rows"]
+        assert rows
+        failed = [row["effect"] for row in rows if not row["pass"]]
+        assert failed == []
+        for row in rows:
+            if "dissolve" in row["effect"]:
+                assert abs(row["delta"]) <= 0.15
+
+
+def test_articles_and_history_templates():
+    articles = yaml.safe_load((ROOT / "templates" / "articles.yaml").read_text())
+    history = yaml.safe_load((ROOT / "templates" / "history.yaml").read_text())
+    assert articles["style"] == "vox-explainer"
+    assert articles["camera"]["tracks"][0]["keys"][1]["v"] == 1.40
+    assert articles["transition"]["seconds"] == 0.709
+    assert history["style"] == "history-story"
+    assert history["camera"]["tracks"][2]["keys"][1]["v"] == 1.34
+    assert history["transition"]["seconds"] == 2.0
+    assert history["transition"]["ease"] == "easeInOutCubic"
+
+
 def test_inventory_pins_and_vox_template():
     pins = yaml.safe_load((ROOT / "tests" / "fixtures" / "effects_inventory.yaml").read_text())
     assert pins["ref1"]["pan"]["ease"] == "expoOut"

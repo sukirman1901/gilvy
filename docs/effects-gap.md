@@ -1,4 +1,4 @@
-# Effects gap, re-checked against main `ff6b58f`
+# Effects gap, re-checked against main after the overlay and template passes
 
 Inventory: the 2026-11-04 Farneback pass on ref1, ref2, and ref3 (source
 608×1080). px are source pixels. “Ready” means the episode can author the
@@ -26,3 +26,9 @@ films; the library may still draw them.
 | Vignette, flicker, light leak, dust, glitch, wipe | not measured | not measured | not measured | Ready in the library, absent from the inventory. |
 | Match-cut semantics | — | — | — | Missing. A cut is a cut; “same shape on both sides” is not a transition type. |
 | Animated colour, separate from the plate | not measured | not measured | not measured | Missing. Grade is one choice per shot. |
+
+Templates: `templates/vox.yaml` (ref1), `templates/articles.yaml` (ref2),
+`templates/history.yaml` (ref3). Replica tables, all rows passing:
+`tests/fixtures/vox_replica_table.json`, `ref2_replica_table.json`,
+`ref3_replica_table.json`. Dissolves are ±0.15 s. Zoom refs on ref2 and ref3
+are log rates of the authored endpoints.
