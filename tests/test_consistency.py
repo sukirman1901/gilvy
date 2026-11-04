@@ -52,7 +52,7 @@ def test_zoom_rate_stays_within_twenty_percent_of_the_camera():
     expected = (camera["to"]["scale"] - camera["from"]["scale"]) / duration * 100.0
     rate = camera_metrics(camera, duration)["zoom_pct_per_s"]
     assert abs(rate - expected) <= abs(expected) * ZOOM_TOL
-    assert 0.80 <= rate <= 6.00
+    assert 0.80 <= rate <= RULES[HISTORY]["zoom_hi"]
 
 
 def test_history_text_is_full_within_two_tenths_and_two_to_three_times_larger():
@@ -141,8 +141,8 @@ def test_sepia_poles_and_green_check():
     black = np.zeros((4, 4, 3), np.float32)
     hi = _grade(white, "sepia")[0, 0]
     lo = _grade(black, "sepia")[0, 0]
-    assert hi == pytest.approx((0xD3, 0xC0, 0xAA), abs=1)
-    assert lo == pytest.approx((0x26, 0x1C, 0x15), abs=1)
+    assert hi == pytest.approx((0xEA, 0xD0, 0xB3), abs=1)
+    assert lo == pytest.approx((0x1A, 0x14, 0x11), abs=1)
     assert checks_green(HISTORY) is False
     assert checks_green(HOUSE) is True
     assert checks_green("vox-explainer") is True

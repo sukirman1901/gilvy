@@ -130,14 +130,14 @@ Author dissolves at **0.40 s** (**observed** order of magnitude 0.3–0.5 s; the
 
 The shot study calls the push **slow and linear**. Combined with the flat stretches in the zoom samples, plate ease defaults to **linear** (**inferred**). It is not proven for every beat.
 
-**Conformance:** push **0.80–6.00 %/s**, or pull **0.80–16.0 %/s**. A pan of at least 8 px/s can carry a plate whose zoom is under 0.4 %/s. QC fails a static plate.
+**Conformance:** push or pull **0.80–26 %/s**. A shot of **1.5 s or less** may punch up to **40 %/s**. Scale may reach **2.4**. Ease defaults to **exponential** so a measured constant %/s matches the authored rate; `ease: linear` is the old scale lerp, which reads about 0.7–0.85× that rate in the middle of a push. A pan of at least 8 px/s can carry a plate whose zoom is under 0.4 %/s. The blit keeps an extra margin so a pan at scale 1 is not clamped away. QC fails a static plate. There is no intro fade from black.
 
 ### Grade, grain, type, circle
 
-- `grade: sepia` remaps luminance between two measured poles: shadow **#261c15** and highlight **#d3c0aa**. A classic matrix plus a warm lift pushed highlights to about **#faedb4** (too bright and yellow). This is a two-pole grade, not a recovered LUT. QC skips the green-tint check on this style because sepia browns were false positives.
+- `grade: sepia` remaps luminance from shadow **#1a1411** to highlight **#ead0b3** (darker and warmer than the first `#261c15` / `#d3c0aa` pair). QC skips the green-tint check on this style.
 - `grain: 0.16–0.24`. Heavy grain and a canvas weave are **observed** on the stills. The 0–1 amount is **not** a measured noise sigma.
 - Emphasis text is centered, one short phrase, red. A frame at 5.0 s (“Victor Lustig”) is **serif** (**observed**). Pixels that passed a red threshold there have median about **(178, 74, 66)** (**measured**, antialiasing included). That is the default overlay color. Whether “DISAPPEARED” is serif or sans was **not** isolated. **Uncertain.** Default remains serif; set `font: sans` if the phrase is the blunt one.
-- Default size is **216** design pixels, three times the old 72. On the Lustig recreation 72 px still read about **nine times** smaller than the reference, so 216 is a round-1 correction, not a match. Set `size` when a phrase needs to go further (the cap is 480).
+- Default size is **216** design pixels. Several words stack one per line (`IN` / `1925`, `DEAL` / `WAS` / `REAL`) and the block shrinks until it fits the frame.
 - Entrance fade is **`text_fade_s: 0.15`** (scene or overlay). The old 0.45 s fade reached full opacity about **0.32 s late**. A consistency test locks full opacity to **±0.20 s** of `at + text_fade_s`. `keyword` still starts **0.15 s after** that word’s share of `vo` (**observed** lag; the 0.15 s offset is a preset choice, **uncertain**).
 - The red circle on the documents draws itself from about **13.2 s to 14.4 s** (**observed** on the 0.2 s strip), so about **1.2 s**, with a scribble cue (**observed**, not synthesized). Author `kind: circle` with `duration` near 0.8–1.2 s. The shot study’s “~13 s” matches the start, not a 0.3 s flick.
 - A brown card with white sans (“And the strangest part?”) is **observed** in the shot study and was not re-cropped here. Use `font: sans` and a paper-colored plate if you cut that beat. **Uncertain** on the exact wording’s timing.
@@ -161,7 +161,7 @@ For these two styles, technical QC adds three checks on each `type: image` scene
 
 ## Assets
 
-`gilvy assets episode.yaml --reference video.mp4` writes four interior frames (style refs, not committed plates) and prints one fixed prompt template per style. history-story’s template is **archival photo, sepia, grain, vignette, framing**. Each plate’s pixel size is the 1080×1920 frame plus the camera’s pan margin, multiplied by the tightest zoom, so the move does not run out of picture. When the PNG already exists, the manifest compares its brightness, contrast, and colour to those frames and, on a miss, sets `image_qc.regen` with what to change.
+`gilvy assets episode.yaml --reference video.mp4` writes four interior frames (style refs, not committed plates) and prints one fixed prompt template per style. history-story’s template is **archival photo, sepia, grain, vignette, framing**. Each plate’s pixel size is the 1080×1920 frame plus the camera’s pan margin, multiplied by the tightest zoom, so the move does not run out of picture. When the PNG already exists, the manifest compares its brightness, contrast, and colour to the reference frame in the nearest brightness bucket (not one average of every shot) and, on a miss, sets `image_qc.regen`.
 
 ## Gaps
 

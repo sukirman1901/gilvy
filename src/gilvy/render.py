@@ -41,6 +41,8 @@ def theme_for(episode: Episode) -> Theme:
     rules = RULES.get(episode.style)
     if rules and "pad" in rules:
         theme = replace(theme, pad=float(rules["pad"]), lead=float(rules["lead"]))
+    if rules and "intro" in rules:
+        theme = replace(theme, intro=float(rules["intro"]))
     return theme
 
 
@@ -113,7 +115,7 @@ class RenderState:
                 nxt = compose(self.paint(i + 1, nxt_u))
                 image = image * (1 - k) + nxt * k
         bg = np.array(self.theme.bg)
-        if t < self.theme.intro:
+        if self.theme.intro > 0 and t < self.theme.intro:
             fade = cl(t / self.theme.intro)
             image = image * fade + bg * (1 - fade)
         if t > self.total - self.theme.outro:
@@ -166,7 +168,11 @@ def scene_durations(episode: Episode, voiced: list[float]) -> list[float]:
     out = []
     for scene, spoken in zip(episode.scenes, voiced):
         floor = theme.min_duration if scene.min is None else scene.min
-        out.append(max(floor, spoken + theme.pad + theme.lead))
+        # vo_overrun keeps the authored shot. The line plays into the next one.
+        if episode.vo_overrun or scene.vo_overrun:
+            out.append(float(floor))
+        else:
+            out.append(max(floor, spoken + theme.pad + theme.lead))
     return out
 
 
@@ -274,7 +280,8 @@ def _write_pad(path: Path, total: float) -> None:
         handle.writeframes((stereo * 32767).astype(np.int16).tobytes())
 
 
-def _mix_audio(pad: Path, voices: list[Path], starts: np.ndarray, lead: float, total: float, dest: Path) -> None:
+def _mix_audio(pad: Path, voices: list[Path], starts: np.ndarray, lead: float, total: float, dest: Path,
+               loop: bool = False, loudness: float | None = None) -> None:
     inputs: list[str] = []
     graph = ""
     for i, voice in enumerate(voices):
@@ -285,9 +292,13 @@ def _mix_audio(pad: Path, voices: list[Path], starts: np.ndarray, lead: float, t
     graph += "".join(f"[v{i}]" for i in range(n))
     graph += f"amix=inputs={n}:normalize=0,apad,asplit[vo][sc];"
     graph += "[0:a][sc]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck];"
-    graph += "[duck][vo]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.9[out]"
+    graph += "[duck][vo]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.9"
+    graph += "[norm];" if loudness is not None else "[out]"
+    if loudness is not None:
+        graph += f"[norm]loudnorm=I={loudness}:TP=-1.5:LRA=11[out]"
+    bed = ["-stream_loop", "-1"] if loop else []
     run = subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-i", str(pad), *inputs, "-filter_complex", graph, "-map", "[out]", "-t", f"{total:.3f}", str(dest)],
+        ["ffmpeg", "-v", "error", "-y", *bed, "-i", str(pad), *inputs, "-filter_complex", graph, "-map", "[out]", "-t", f"{total:.3f}", str(dest)],
         capture_output=True,
         text=True,
     )
@@ -400,22 +411,59 @@ def prepare_timing(episode: Episode, build: Path, tts_name: str) -> tuple[list[P
         if any(not scene.vo.strip() for scene in episode.scenes):
             raise GilvyError("voiceover mode requires vo on every scene")
         paths, spoken = synthesize(episode, build, tts_name)
+        episode.spoken_seconds = list(spoken)
         return paths, scene_durations(episode, spoken)
     if any(scene.min is None for scene in episode.scenes):
         raise GilvyError("ambient/silent modes require explicit min on every scene")
+    episode.spoken_seconds = []
     return [], [float(scene.min) for scene in episode.scenes]
+
+
+def _render_bed(source: Path, total: float, dest: Path, loop: bool, loudness: float | None) -> None:
+    cmd = ["ffmpeg", "-v", "error", "-y"]
+    if loop:
+        cmd += ["-stream_loop", "-1"]
+    cmd += ["-i", str(source), "-t", f"{total:.3f}"]
+    if loudness is not None:
+        cmd += ["-af", f"loudnorm=I={loudness}:TP=-1.5:LRA=11"]
+    cmd.append(str(dest))
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    if run.returncode != 0:
+        raise GilvyError(f"ffmpeg bed failed:\n{run.stderr[-2000:]}")
 
 
 def prepare_audio(episode: Episode, state: RenderState, build: Path, voices: list[Path]) -> Path | None:
     if episode.audio_mode == "silent":
         return None
-    pad = build / "pad.wav"
-    _write_pad(pad, state.total)
-    if episode.audio_mode == "ambient":
-        return pad
+    loop = False
+    if episode.music:
+        bed = Path(episode.music)
+        loop = True
+    else:
+        bed = build / "pad.wav"
+        _write_pad(bed, state.total)
+    if episode.audio_mode == "ambient" or not voices:
+        if loop or episode.loudness is not None:
+            dest = build / "bed.wav"
+            _render_bed(bed, state.total, dest, loop, episode.loudness)
+            return dest
+        return bed
     mix = build / "mix.wav"
-    _mix_audio(pad, voices, state.starts, state.theme.lead, state.total, mix)
+    _mix_audio(bed, voices, state.starts, state.theme.lead, state.total, mix, loop, episode.loudness)
     return mix
+
+
+def _vo_extent(episode: Episode, index: int, scene: Scene) -> dict:
+    spoken = (episode.spoken_seconds or [None] * len(episode.scenes))
+    seconds = spoken[index] if index < len(spoken) else None
+    if seconds is None or scene.min is None:
+        return {}
+    extends = float(seconds) > float(scene.min) + 0.05 and not (episode.vo_overrun or scene.vo_overrun)
+    return {
+        "vo_seconds": round(float(seconds), 3),
+        "shot_min": float(scene.min),
+        "vo_extends_shot": extends,
+    }
 
 
 def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: str) -> None:
@@ -448,6 +496,8 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "caption": scene.caption,
                 "key": scene.key,
                 "vo": scene.vo,
+                "vo_overrun": scene.vo_overrun,
+                **_vo_extent(episode, i, scene),
                 **(
                     {"camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
                      "transition_out": scene.params.get("transition_out", "cut")}
