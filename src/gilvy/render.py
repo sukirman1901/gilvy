@@ -20,7 +20,7 @@ from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
-from gilvy.image_scene import camera_metrics, render_image_frame, zoom_through
+from gilvy.image_scene import camera_metrics, match_warp, render_image_frame, zoom_through
 from gilvy.presets import PHOTO_PRESETS, RULES
 from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
@@ -137,8 +137,18 @@ class RenderState:
             return image
         k = (u - (self.durations[index] - xf)) / xf
         k = 0.0 if k < 0 else 1.0 if k > 1 else k
-        from gilvy.keyframes import apply_ease
+        from gilvy.keyframes import apply_ease, sample_keys
         k = apply_ease(params.get("transition_ease") or "linear", k)
+        if kind == "match":
+            # The outgoing frame slides onto the incoming shape, then the next
+            # scene starts. There is no blend.
+            local = u - (self.durations[index] - xf)
+            tracks = params.get("match_tracks") or {}
+            scale = sample_keys(tracks["scale"], local, xf) if "scale" in tracks else 1.0
+            ox = sample_keys(tracks["x"], local, xf) if "x" in tracks else 0.0
+            oy = sample_keys(tracks["y"], local, xf) if "y" in tracks else 0.0
+            rotation = sample_keys(tracks["rotation"], local, xf) if "rotation" in tracks else 0.0
+            return match_warp(image, scale, ox, oy, rotation)
         nxt = self.picture(index + 1, u - self.durations[index])
         if kind == "zoom":
             return zoom_through(image, nxt, k)

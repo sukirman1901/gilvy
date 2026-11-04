@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 
 import gilvy.render as render
 from gilvy.detect import detect_shot, fit_ease
+from gilvy.image_scene import high_frequency_std, render_image_frame
 from gilvy.effects import KINDS
 from gilvy.episode import load_episode
 from gilvy.errors import EpisodeError
@@ -728,6 +729,141 @@ scenes:
     small = _ink(_overlay_frame(tmp_path / "a", monkeypatch, body(0.05), "red"), "text")
     large = _ink(_overlay_frame(tmp_path / "b", monkeypatch, body(0.55), "red"), "text")
     assert large > small * 1.15
+
+
+def test_match_cut_moves_the_outgoing_shape_and_does_not_blend(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "theme_for", lambda ep: _theme())
+    image = Image.new("RGBA", (480, 840), (180, 30, 30, 255))
+    ImageDraw.Draw(image).rectangle((120, 300, 200, 380), fill=(250, 250, 250, 255))
+    image.save(tmp_path / "out.png")
+    Image.new("RGBA", (480, 840), (20, 30, 180, 255)).save(tmp_path / "inn.png")
+    path = tmp_path / "ep.yaml"
+    path.write_text("""
+name: match
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["out"]
+    min: 1.2
+    image: out.png
+    grade: none
+    grain: 0
+    transition_out: match
+    transition: 0.6
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.04}
+    match:
+      tracks:
+        - property: x
+          keys:
+            - {t: 0.0, v: 0, ease: linear}
+            - {t: 0.6, v: 70, ease: linear}
+  - type: image
+    caption: ["in"]
+    min: 1.2
+    image: inn.png
+    grade: none
+    grain: 0
+    transition_out: cut
+    camera:
+      from: {scale: 1.04}
+      to: {scale: 1.0}
+""", encoding="utf-8")
+    episode = load_episode(path)
+    from gilvy.render import build_state, scene_durations
+    state = build_state(episode, scene_durations(episode, [0, 0]))
+
+    def white_x(n):
+        frame = state.frame_array(n)
+        mask = frame.mean(axis=2) > 200
+        ys, xs = np.nonzero(mask)
+        return float(xs.mean()) if len(xs) else None, frame
+
+    before, _ = white_x(12)  # t=0.60, the window has not started
+    landed, outgoing = white_x(23)  # t=1.15, near the end of the 0.6s alignment
+    _, incoming = white_x(24)
+    assert before is not None and landed is not None
+    assert landed - before > 40
+    assert float(outgoing[:, :, 0].mean()) > float(outgoing[:, :, 2].mean())
+    assert float(incoming[:, :, 2].mean()) > float(incoming[:, :, 0].mean()) + 40
+
+
+def test_color_tracks_move_hue_without_replacing_the_plate_grade(tmp_path):
+    image = Image.new("RGBA", (480, 840), (210, 40, 30, 255))
+    image.save(tmp_path / "plate.png")
+    body = """
+name: hue
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["hue"]
+    min: 1.2
+    image: plate.png
+    grade: {grade}
+    grain: 0
+    camera:
+      from: {{scale: 1.0}}
+      to: {{scale: 1.04}}
+    color:
+      tracks:
+        - property: hue
+          keys:
+            - {{t: 0.0, v: 0, ease: linear}}
+            - {{t: 1.2, v: 120, ease: {ease}}}
+"""
+    def frame(grade, ease, u):
+        dest = tmp_path / f"{grade}-{ease}"
+        dest.mkdir(parents=True, exist_ok=True)
+        episode = load_episode(_write(dest, body.format(grade=grade, ease=ease)))
+        Image.new("RGBA", (480, 840), (210, 40, 30, 255)).save(dest / "plate.png")
+        scene = {
+            "type": "image", "params": episode.scenes[0].params, "vo": "", "caption": ["hue"],
+            "key": [], "style": "history-story",
+        }
+        return render_image_frame(_theme(), scene, u, 1.2, str(tmp_path / f"{grade}-{ease}"))
+
+    start = frame("none", "linear", 0.0)
+    end = frame("none", "linear", 1.2)
+    mid_ease = frame("none", "easeInCubic", 0.6)
+    assert float(start[:, :, 0].mean()) > float(start[:, :, 1].mean()) + 40
+    assert float(end[:, :, 0].mean()) < float(start[:, :, 0].mean()) - 30
+    # easeInCubic(0.5) = 0.125, so the midpoint is still close to the red start.
+    assert abs(float(mid_ease[:, :, 0].mean()) - float(start[:, :, 0].mean())) < abs(
+        float(end[:, :, 0].mean()) - float(start[:, :, 0].mean())
+    ) * 0.5
+    sepia = frame("sepia", "linear", 0.0)
+    assert float(sepia[:, :, 0].mean()) > float(sepia[:, :, 2].mean())
+    assert float(np.mean(np.abs(sepia - start))) > 10
+
+
+def test_grain_std_matches_the_high_frequency_measurement(tmp_path):
+    path = _write(tmp_path, """
+name: grain
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["grain"]
+    min: 1.2
+    image: plate.png
+    grade: none
+    grain: 0
+    grain_std: 10
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.04}
+""")
+    Image.new("RGBA", (480, 840), (128, 128, 128, 255)).save(tmp_path / "plate.png")
+    episode = load_episode(path)
+    scene = {
+        "type": "image", "params": episode.scenes[0].params, "vo": "", "caption": ["grain"],
+        "key": [], "style": "history-story",
+    }
+    frame = render_image_frame(_theme(), scene, 0.4, 1.2, str(tmp_path))
+    assert high_frequency_std(frame) == pytest.approx(10, abs=1.0)
 
 
 def test_eased_dissolve_may_last_four_seconds(tmp_path):
