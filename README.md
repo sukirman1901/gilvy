@@ -36,9 +36,10 @@ the default Docker image do not include the optional downloader.
 ## Make a video
 
 ```bash
-gilvy preview examples/ep01-mie-ayam.yaml --tts fixture
-gilvy render examples/ep01-mie-ayam.yaml
-gilvy qc out/ep01-mie-ayam.mp4
+gilvy new my-video
+gilvy preview my-video/my-video.yaml --tts fixture
+gilvy render my-video/my-video.yaml
+gilvy qc out/my-video.mp4
 ```
 
 `--tts edge` (the default) calls edge-tts. `--tts fixture` is an offline tone so you can check layout without the network. Publish with the real voice.
@@ -53,16 +54,14 @@ gilvy qc out/ep01-mie-ayam.mp4
 | `gilvy qc out.mp4` | Green ratio, silence gaps, blank and dark frames. Exit 1 on a violation |
 | `gilvy mcp` | MCP server on stdio |
 
-A scene is a type from the library (`bowl_hook`, `coin_drop`, `ring_drain`, `compare`, `highlight`, `bowl_cta`, `timeline`, `checklist`, `jars`, `converge`, `coin_cta`) or `python: file.py:draw` when the library cannot say it. Examples:
+A scene is a type from the library (`bowl_hook`, `coin_drop`, `ring_drain`, `compare`, `highlight`, `bowl_cta`, `timeline`, `checklist`, `jars`, `converge`, `coin_cta`) or a Python entry point when the library cannot say it.
 
-- `examples/ep01-mie-ayam.yaml` — Indonesian, `id-ID-ArdiNeural`
-- `examples/day30-january.yaml` — English, no green
-- `examples/custom.yaml` — the escape hatch
-- `examples/reflection.yaml` — an offline caption-and-ambient metaphor, no numerical beat or CTA
-
-See [the examples index](examples/README.md) for each sample's purpose, test or
-guide dependencies, and which files are procedural diagnostics rather than
-visual design references.
+[examples/README.md](examples/README.md) lists the small API/configuration
+examples. They demonstrate syntax and mechanics, not a visual quality target.
+Earlier accepted house studies live in [references/house](references/house/README.md).
+Legacy sample films and placeholder plates required by regression tests live
+under `tests/fixtures`; do not use them as creative references. The generic SaaS
+and personal salt films have been retired. See [the complete audit](docs/examples-audit.md).
 
 Voice, language, output path, palette, and font directory are fields on the episode. Nothing is monkeypatched.
 
@@ -76,14 +75,14 @@ absolute time, so frame order and worker count do not change the pose.
 ```bash
 gilvy elements
 gilvy motion-reference
-gilvy preview examples/elements.yaml
-gilvy preview-motion examples/elements.yaml --duration 7
+gilvy preview tests/fixtures/episodes/elements.yaml
+gilvy preview-motion tests/fixtures/episodes/elements.yaml --duration 7
 ```
 
 The MCP exposes `list_visual_elements` and `motion_reference`. See the
 [API and Bojonegoro motion study](src/gilvy/MOTION_REFERENCE.md) for usage,
 meaning, and misuse notes. The 41-second approved data story is reproducible
-from `examples/bojonegoro/episode.yaml`; read its dated sources before reuse.
+from `references/house/bojonegoro/episode.yaml`; read its dated sources before reuse.
 More vocabulary should add meaning while preserving whitespace and one hero.
 
 ## Review motion before the full cut
@@ -94,8 +93,8 @@ before the full render. When continuing an approved cut, compare matching-size
 clips and inspect intended changes such as the removal of a sample's outro.
 
 ```bash
-gilvy preview-motion examples/reflection.yaml --duration 7.2 --out out/proof.mp4
-gilvy render examples/reflection.yaml
+gilvy preview-motion references/house/reflection.yaml --duration 7.2 --out out/proof.mp4
+gilvy render references/house/reflection.yaml
 gilvy compare out/proof.mp4 out/revised-proof.mp4 --duration 7.2
 ```
 
@@ -145,9 +144,9 @@ ranges, what was only observed, and the gaps are in
 gilvy download-reference 'https://www.youtube.com/watch?v=...' --out out/reference-download
 gilvy analyze-reference out/reference-download/<video> --out out/reference-study
 gilvy reference-styles
-gilvy assets examples/styles/history-story.yaml
-gilvy render examples/styles/history-story.yaml --tts fixture
-gilvy qc out/history-story-sample.mp4
+gilvy assets your-episode.yaml --reference out/reference-download/<video>
+gilvy render your-episode.yaml
+gilvy qc out/your-episode.mp4
 ```
 
 `gilvy assets episode.yaml --reference video.mp4` lists every PNG, the fixed
@@ -155,7 +154,7 @@ prompt template, an overscan size so pan and zoom stay inside the picture, and
 style frames from the video. When a PNG is already there it compares brightness,
 contrast, and colour and adds a regen hint on a miss. Render fails if a path is
 missing. Generate the art outside the repo. Do not commit frames from the
-reference. Samples under `examples/styles/` use procedural stand-in plates.
+reference. Procedural plates under `tests/fixtures/episodes/styles/` are offline test inputs, not examples of the requested visual style.
 MCP `asset_manifest` takes the same optional reference. `history-story` uses pad/lead 0, no intro fade, exponential zoom up to about
 26%/s, stacked emphasis type, and sepia from `#1a1411` to `#ead0b3`. Pan does
 not raise the zoom: the window shifts, and a short plate repeats its edge. A
@@ -176,8 +175,8 @@ For SaaS/UI films use a separate `style: product` YAML, not a restyled explainer
 
 ```bash
 gilvy product-notes
-gilvy preview-product examples/product/inbox.yaml --out out/product-stills
-gilvy render-product examples/product/inbox.yaml --out out/product.mp4
+gilvy preview-product examples/technical/composition.yaml --out out/product-stills
+gilvy render-product examples/technical/composition.yaml --out out/product.mp4
 ```
 
 The CPU compositor supports code-drawn inbox/form/workflow/dropdown UI, text
@@ -204,11 +203,11 @@ Green is one number: the money figure, or a count and the counter that repeats i
 
 ```bash
 docker build -t gilvy .
-docker run --rm -v "$PWD:/work" -w /work gilvy render examples/ep01-mie-ayam.yaml --out out/ep01.mp4
+docker run --rm -v "$PWD:/work" -w /work gilvy render tests/fixtures/episodes/ep01-mie-ayam.yaml --out out/ep01.mp4
 docker run --rm -v "$PWD:/work" -w /work gilvy qc out/ep01.mp4
 ```
 
-The image already contains the examples at `/opt/gilvy/examples`. CI renders `ep01-mie-ayam.yaml` there with `--tts fixture` and requires QC to pass. Fixture keeps the job deterministic; a published video uses edge-tts.
+The image contains API examples and the single CI input at `/opt/gilvy/smoke/ep01-mie-ayam.yaml`. CI renders that input with `--tts fixture` and requires QC to pass. The rest of the test artwork and retired demo films are not bundled as production references.
 
 ## Agents
 
@@ -226,13 +225,13 @@ Frame tests redraw the original episodes and compare bytes with the vendored ren
 
 gilvy membuat video penjelasan 9:16 tanpa wajah: gambar gerak, teks, dan sulih suara. Naskahnya satu berkas YAML.
 
-Contoh bahasa Indonesia: `examples/ep01-mie-ayam.yaml`, suara `id-ID-ArdiNeural`.
+Mulai dengan `gilvy new video-saya`, lalu sunting `video-saya/video-saya.yaml`. Bahan tes lama bukan standar kualitas visual.
 
 Urutannya: tulis voice-over dulu, pilih jenis adegan, `gilvy preview`, `gilvy render`, lalu `gilvy qc`. Hijau hanya untuk satu angka di layar. Caption tetap putih. Kalau QC gagal, perbaiki YAML-nya. Jangan mengubah mesin gambarnya.
 
 ```bash
-gilvy render examples/ep01-mie-ayam.yaml
-gilvy qc out/ep01-mie-ayam.mp4
+gilvy render video-saya/video-saya.yaml
+gilvy qc out/video-saya.mp4
 ```
 
 ## Composition and native frame inspection
@@ -243,9 +242,9 @@ product films keep their global timing and legacy typography. The house show
 keeps its established rendering and style.
 
 ```bash
-gilvy serve-product examples/product/composition.yaml --port 8765
-gilvy inspect-product examples/product/composition.yaml --frame 90 --out out/frame-90.png
-gilvy render-product examples/product/composition.yaml --out out/composition.mp4
+gilvy serve-product examples/technical/composition.yaml --port 8765
+gilvy inspect-product examples/technical/composition.yaml --frame 90 --out out/frame-90.png
+gilvy render-product examples/technical/composition.yaml --out out/composition.mp4
 ```
 
 The local viewer seeks exact frames with the same native renderer as export;

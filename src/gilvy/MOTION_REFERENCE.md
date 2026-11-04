@@ -62,8 +62,8 @@ clock. The compact `people` group retains its separate original glyph.
 
 `drop` and `flame` use a continuous antialiased contour through `Ctx.stroke`,
 with dense cubic samples. Each outline is painted once; do not rebuild curves
-as separately capped short lines. `examples/elements-refined.yaml` isolates
-these three elements for visual review.
+as separately capped short lines. `tests/fixtures/episodes/elements-refined.yaml` isolates
+these three elements for regression review; it is not an approved narrative composition.
 
 - `activity`: local motion amount [0,1], default 0 (still). It animates applicable
   limbs, flame tips, wisps, foliage, rays, pages, flow beads, and road dashes.
@@ -73,7 +73,7 @@ these three elements for visual review.
   the single counted quantity, never to make fire orange or trees green.
 - Helpers do not add captions, labels, audio, shadows, or background grids.
 
-Preview `examples/elements.yaml` for all 14 shapes. Its four specimen grids are
+For a technical inventory only, preview `tests/fixtures/episodes/elements.yaml` for all 14 shapes. Its four specimen grids are
 an inventory comparison, **not a narrative layout template**. A story keeps one
 hero, its supporting action, and sufficient whitespace.
 
@@ -84,7 +84,7 @@ for smoothness, precision, and visual quality. Its limitation was a narrow
 vocabulary of dots, lines, and circles. Preserve that craft while extending the
 range of objects. Approval is for this piece; it does not certify new elements.
 
-Reproduce the sources with `examples/bojonegoro/episode.yaml`. It is a historical
+Reproduce the sources with `references/house/bojonegoro/episode.yaml`. It is a historical
 2025 data story, not a current-data template. Read its `SOURCES.md` before reuse.
 The original worker drawing is preserved in `pekerja.py`; the continuation is
 in `cerita.py`. No rendered MP4 or private workspace path is required.

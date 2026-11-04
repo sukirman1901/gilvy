@@ -11,7 +11,7 @@ from gilvy.product import load_product, validate
 
 @pytest.fixture
 def launch(tmp_path):
-    source = Path(__file__).parents[1] / "examples/product/launch/build.py"
+    source = Path(__file__).parents[1] / "tests/fixtures/product_launch/build.py"
     spec = importlib.util.spec_from_file_location("launch_example", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

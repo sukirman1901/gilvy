@@ -197,7 +197,7 @@ git commit -m "Map design coordinates through the delivery fit in Ctx"
 
 ```python
 def test_format_defaults_to_vertical():
-    episode = load_episode("examples/ep01-mie-ayam.yaml")
+    episode = load_episode("tests/fixtures/episodes/ep01-mie-ayam.yaml")
     assert episode.format == "vertical_9x16"
 
 def test_unknown_format_is_rejected(tmp_path):

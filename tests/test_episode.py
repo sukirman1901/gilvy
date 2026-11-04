@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_examples_load():
-    indo = load_episode(ROOT / "examples" / "ep01-mie-ayam.yaml")
+    indo = load_episode(ROOT / "tests/fixtures/episodes" / "ep01-mie-ayam.yaml")
     assert indo.voice == "id-ID-ArdiNeural"
     assert indo.language == "id-ID"
     assert indo.rate == "-8%"
@@ -22,7 +22,7 @@ def test_examples_load():
         "bowl_cta",
     ]
     assert indo.scenes[3].params["count_from"] == 268
-    english = load_episode(ROOT / "examples" / "day30-january.yaml")
+    english = load_episode(ROOT / "tests/fixtures/episodes" / "day30-january.yaml")
     assert english.voice == "en-US-AndrewNeural"
     assert english.scenes[0].type == "timeline"
     custom = load_episode(ROOT / "examples" / "custom.yaml")

@@ -21,9 +21,9 @@ conflict in this brief. A ring is not automatically a good metaphor either.
 Run the stronger motion proof offline:
 
 ```bash
-gilvy preview examples/reflection.yaml
-gilvy preview-motion examples/reflection.yaml --duration 7.2 --out out/reflection-proof.mp4
-gilvy render examples/reflection.yaml
+gilvy preview references/house/reflection.yaml
+gilvy preview-motion references/house/reflection.yaml --duration 7.2 --out out/reflection-proof.mp4
+gilvy render references/house/reflection.yaml
 ```
 
 This caption-and-ambient example intentionally needs no narration or numeric

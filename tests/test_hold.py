@@ -17,7 +17,7 @@ def test_long_scene_idles_only_after_the_verb():
 
 
 def test_long_compare_changes_during_the_hold():
-    episode = load_episode("examples/ep01-mie-ayam.yaml")
+    episode = load_episode("tests/fixtures/episodes/ep01-mie-ayam.yaml")
     state = build_state(episode, [16.0] * len(episode.scenes))
     # Punch is scene 4. The verb is still running at both samples (65% of 16s).
     start = float(state.starts[4])

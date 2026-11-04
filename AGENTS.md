@@ -34,7 +34,7 @@ Use `--tts fixture` only to check layout without the network. The voice you ship
 - Paint a second idea green. Caption keys stay white. A word is green only when it starts with `$`, and that should be the same quantity as the one green figure.
 - Move the caption up to chase a safe zone. The baseline is y=1290.
 - Edit `src/gilvy/draw.py` or the scene formulas to fix one episode. Change the YAML, or add a `python` scene that uses the same primitives.
-- Leave a long voice on a scene whose motion already finished. Past 7 seconds the landed object can idle, but a second beat of the same object is the better cut. Chain objects the way `examples/ep01-mie-ayam.yaml` does. Do not zoom the camera to fake motion.
+- Leave a long voice on a scene whose motion already finished. Past 7 seconds the landed object can idle, but a second beat of the same object is the better cut. Chain objects the way `tests/fixtures/episodes/ep01-mie-ayam.yaml` does. Do not zoom the camera to fake motion.
 - Put secrets, account ids, or personal data in an episode, a voice cache, or a commit.
 
 ## Tools
@@ -69,3 +69,12 @@ fragments, independent tracks and attached annotations. State the intended
 relationship between cutouts; co-location in one photo needs evidence. Keep
 scene briefs separate from per-asset prompts. Inspect native beginning/end
 poses and a boundary-spanning proof before extending the film.
+
+## Example quality boundary
+
+Read `examples/README.md` and `docs/examples-audit.md`. API examples demonstrate
+syntax; `tests/fixtures/` provides technical regression inputs and must never
+be used as a creative standard. `references/house/` preserves earlier accepted
+house studies only. There is no bundled approved Vox or SaaS master. A preset
+name, photographic cutout, measured track, or passing test does not establish
+reference fidelity. Build a new composition from the actual supplied reference.

@@ -67,7 +67,7 @@ colour separation. Optional paper/grain/grade still need deliberate authoring.
 
 Use `type: image`, an existing opt-in `style: vox-explainer` or
 `style: history-story`, and `composition: collage`. House scenes are unchanged.
-See `examples/styles/editorial-collage.yaml` for an asset-intake example.
+See `examples/technical/editorial-collage.yaml` for an asset-intake example.
 
 ```yaml
 name: editorial
@@ -233,7 +233,7 @@ or list of vocabulary has implemented them.
 Reproduce the procedural four-second diagnostic (not a reference reconstruction):
 
 ```bash
-python examples/styles/build_collage_demo.py --out /tmp/collage-demo
+python examples/technical/build_collage_demo.py --out /tmp/collage-demo
 gilvy assets /tmp/collage-demo/editorial-collage.yaml
 gilvy preview-motion /tmp/collage-demo/editorial-collage.yaml --start 0 --duration 4 --out /tmp/collage-demo/proof.mp4
 ```

@@ -92,14 +92,15 @@ def test_catalog_cli_mcp_and_packaged_guide_agree(capsys):
 def test_examples_preflight_and_bojonegoro_preserves_rounded_population():
     for relative,total in (('elements.yaml',14),('bojonegoro/episode.yaml',41),
                            ('elements-refined.yaml',8.4)):
-        ep=load_episode(ROOT/'examples'/relative)
+        base=ROOT/'references/house' if relative.startswith('bojonegoro/') else ROOT/'tests/fixtures/episodes'
+        ep=load_episode(base/relative)
         preflight(ep)
         state=build_state(ep,[s.min for s in ep.scenes])
         assert state.total==pytest.approx(total)
         # Actually invoke each custom scene once; imports and entry points work.
         for i,duration in enumerate(state.durations):
             assert np.any(np.array(state.paint(i,duration*.8).im)>20)
-    ep=load_episode(ROOT/'examples/bojonegoro/episode.yaml')
+    ep=load_episode(ROOT/'references/house/bojonegoro/episode.yaml')
     assert [ep.scenes[i].min for i in (1,2)]==[3,5]
     assert ep.scenes[2].caption==['45 dari 100 pekerja.','di sektor pertanian.']
     assert 44.62<361706/810528*100<44.64
