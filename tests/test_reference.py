@@ -112,7 +112,11 @@ def test_ref3_known_dissolves_are_candidates():
     content changes are the spread-out blends near 9.0s and 14.5s.
     """
     video = Path("/home/ubuntu/.cursor/projects/workspace/uploads/ref3_52fb.mp4")
-    if not video.is_file():
+    try:
+        present = video.is_file()
+    except OSError:
+        present = False
+    if not present:
         pytest.skip("ref3 upload is not in this environment")
     soft = detect_soft_transitions(video, hard_times=[3.68, 5.68, 23.80, 27.68, 28.80])
 
