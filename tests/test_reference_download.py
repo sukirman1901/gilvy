@@ -45,6 +45,35 @@ def fake_worker(monkeypatch, video):
     return metadata,calls
 
 
+@pytest.mark.parametrize("url,expect", [
+    ("https://www.youtube.com/watch?v=awUYikrGsKk", True),
+    ("https://m.youtube.com/watch?v=awUYikrGsKk", True),
+    ("https://youtu.be/awUYikrGsKk", True),
+    ("https://youtube.com/watch?v=awUYikrGsKk", True),
+    ("https://vimeo.com/12345", False),
+    ("https://cdn.example.com/video.mp4", False),
+])
+def test_youtube_sets_node_js_runtime_when_node_exists(fake_worker, monkeypatch, tmp_path, url, expect):
+    monkeypatch.setattr(dl.shutil, "which", lambda name: "/usr/bin/node" if name == "node" else f"/usr/bin/{name}")
+    dl.download_reference(url, tmp_path / "download", max_height=160)
+    _, calls = fake_worker
+    yt_dlp_calls = [args for args in calls if args and args[0] != "ffprobe"]
+    assert yt_dlp_calls
+    for args in yt_dlp_calls:
+        if expect:
+            assert args[args.index("--js-runtimes") + 1] == "node:/usr/bin/node"
+        else:
+            assert "--js-runtimes" not in args
+
+
+def test_youtube_skips_js_runtime_when_node_is_missing(fake_worker, monkeypatch, tmp_path):
+    monkeypatch.setattr(dl.shutil, "which", lambda name: None if name == "node" else f"/usr/bin/{name}")
+    dl.download_reference("https://youtu.be/awUYikrGsKk", tmp_path / "download", max_height=160)
+    _, calls = fake_worker
+    for args in calls:
+        assert "--js-runtimes" not in args
+
+
 def test_publication_manifest_and_query_redaction(fake_worker,tmp_path):
     _,calls=fake_worker
     url='https://cdn.example.com/video.mp4?token=private-value'
