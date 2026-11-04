@@ -225,7 +225,12 @@ def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: fl
     """
     ch, cw = plate.shape[:2]
     scale = max(1.0, float(scale))
-    base = max(cw / max(1, image.width), ch / max(1, image.height))
+    cover = max(cw / max(1, image.width), ch / max(1, image.height))
+    # A plate smaller than the frame is scaled up to cover it. A plate that
+    # already covers the frame keeps its extra pixels as pan and zoom margin.
+    # Cover-fitting that larger plate used to shrink the margin away, and the
+    # pan then repeated the edge.
+    base = cover if cover > 1.0 else 1.0
     draw = base * scale
     sw = max(1, int(round(image.width * draw)))
     sh = max(1, int(round(image.height * draw)))
