@@ -281,10 +281,9 @@ scenes:
     render.render_episode(load_episode(path), video, "fixture", 1)
     shot = detect_shot(video)
     fade = next(item for item in shot["events"] if item["effect"] == "dissolve")
-    # Length is the 2%..98% alpha span, not the full overlap. easeInCubic
-    # reaches those levels at cbrt(0.02) and cbrt(0.98) of the blend.
-    span = 0.98 ** (1.0 / 3.0) - 0.02 ** (1.0 / 3.0)
-    assert fade["duration"] == pytest.approx(1.0 * span, abs=0.08)
+    # 2% and 98% are where the blend is measured. The reported length is the
+    # full overlap those crossings imply, which is the authored 1.0s.
+    assert fade["duration"] == pytest.approx(1.0, abs=0.15)
     assert fade["ease"] in {"easeInCubic", "easeInQuad", "expoIn"}
 
 
@@ -388,9 +387,70 @@ scenes:
     render.render_episode(load_episode(path), video, "fixture", 1)
     shot = detect_shot(video)
     fade = next(item for item in shot["events"] if item["effect"] == "dissolve")
-    span = 0.98 ** (1.0 / 3.0) - 0.02 ** (1.0 / 3.0)
-    assert fade["duration"] == pytest.approx(1.5 * span, abs=0.08)
+    assert fade["duration"] == pytest.approx(1.5, abs=0.15)
     assert fade["ease"] in {"easeInCubic", "easeInQuad", "expoIn"}
+
+
+def test_replica_dissolve_spans_are_within_15_hundredths(tmp_path, monkeypatch):
+    """The vox table trims each outgoing shot. Both inventory lengths survive that."""
+    import subprocess
+
+    monkeypatch.setattr(render, "theme_for", lambda ep: _theme())
+    Image.new("RGBA", (480, 840), (40, 70, 120, 255)).save(tmp_path / "a.png")
+    Image.new("RGBA", (480, 840), (120, 50, 40, 255)).save(tmp_path / "b.png")
+    Image.new("RGBA", (480, 840), (30, 90, 70, 255)).save(tmp_path / "c.png")
+    path = tmp_path / "ep.yaml"
+    path.write_text("""
+name: fades
+style: history-story
+audio_mode: silent
+scenes:
+  - type: image
+    caption: ["long"]
+    min: 2.2
+    image: a.png
+    grade: none
+    grain: 0
+    transition_out: dissolve
+    transition: 1.46
+    transition_ease: easeInCubic
+    camera:
+      from: {scale: 1.0, x: 0, y: 0}
+      to: {scale: 1.04, x: 4, y: 0}
+  - type: image
+    caption: ["short"]
+    min: 1.2
+    image: b.png
+    grade: none
+    grain: 0
+    transition_out: dissolve
+    transition: 0.709
+    transition_ease: easeInCubic
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.03}
+  - type: image
+    caption: ["hold"]
+    min: 1.2
+    image: c.png
+    grade: none
+    grain: 0
+    camera:
+      from: {scale: 1.0}
+      to: {scale: 1.02}
+""", encoding="utf-8")
+    video = tmp_path / "fades.mp4"
+    render.render_episode(load_episode(path), video, "fixture", 1)
+    for start, end, authored in ((0.0, 2.2, 1.46), (2.2, 3.4, 0.709)):
+        clip = tmp_path / f"span-{authored}.mp4"
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+             "-i", str(video), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-an", str(clip)],
+            check=True,
+        )
+        shot = detect_shot(clip)
+        fade = next(item for item in shot["events"] if item["effect"] == "dissolve")
+        assert fade["duration"] == pytest.approx(authored, abs=0.15)
 
 
 def test_typewriter_word_times(tmp_path, monkeypatch):
