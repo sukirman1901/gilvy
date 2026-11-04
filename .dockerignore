@@ -6,6 +6,9 @@
 **/*.egg-info
 out
 uploads
-tests
+tests/**
+!tests/fixtures/
+!tests/fixtures/episodes/
+!tests/fixtures/episodes/ep01-mie-ayam.yaml
 *.mp4
 *.wav

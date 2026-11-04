@@ -36,32 +36,27 @@ general primitives rather than adding a special engine component per client.
    for an engine change, not proof that the engine supports it. Do not invent
    fidelity percentages or claim recovered fonts, layers, shutters or easing.
 
-Use `examples/product/study/build.py` for the scoped 30–35s measurement study
-and an unrelated metric-card exercise. Both render via ProductFilm; neither
-is an approved visual standard or automatic reconstruction.
-
 Read the supplied reference as a sequence of actions before choosing effects.
 Name the object, action, carry, meaning and consequence for each beat. Keep UI
 state changes legible: a menu opens before its destination enters; a learning
 process produces something reusable; a workflow assembles before it is saved.
-Do not describe a generated proof as a replica or recover source keyframes.
 
-The example `examples/product/learning.yaml` is an original twelve-second
-capability demonstration informed by the Numtera study: question -> knowledge
-statement -> learning progress -> reusable workflow -> save. It uses code-drawn
-UI, not extracted Numtera artwork. It does not reproduce the entire reference.
+The former learning, inbox, Numtera study and long launch demos are not supplied
+as visual references. Their generic panels and partial reconstructions did not
+establish the requested SaaS choreography or reference fidelity. The long-film
+builder survives only as a regression fixture for shot boundaries. Do not
+bootstrap a new creative direction from test fixtures or preset screenshots.
+See [the source audit](../../docs/examples-audit.md).
 
 ## Commands and MCP
 
-For the revised UI visual reference, start with `examples/product/inbox.yaml`
-and [the design review](../../docs/product-design.md). The older learning proof
-is a renderer diagnostic, not the product design standard.
+Use the technical composition below to check the API, or pass your own authored
+film. It demonstrates indexed particles and local clocks, not SaaS art direction.
 
 ```bash
 gilvy product-notes
-gilvy preview-product examples/product/learning.yaml --out out/product-stills --times 1.3 4.8 6.5 9.8
-gilvy render-product examples/product/learning.yaml --out out/product-proof.mp4 --start 4 --duration 4
-gilvy render-product examples/product/learning.yaml --out out/product.mp4
+gilvy preview-product examples/technical/composition.yaml --out out/product-stills --times 0.5 2 4 5.5
+gilvy render-product examples/technical/composition.yaml --out out/product-proof.mp4
 ```
 
 MCP: `product_motion_notes`, `preview_product(spec_path, output_dir, times)`,
@@ -153,7 +148,7 @@ is not mutated when paths are resolved. Images are cached by layer like other
 static components. The native integer-translation path avoids unnecessary
 projective resampling of aligned UI child planes.
 
-For a longer staged example see [the 95-second product-film builder](../../examples/product/launch/README.md).
+Shot-boundary regression tests execute `tests/fixtures/product_launch/build.py`; it is test data, not a recommended product-film design.
 
 Inbox panels accept `navigation` and `subtitle`. Form `items` use
 `Label: Value` strings and accept `button`. Workflow items are numbered steps
@@ -286,6 +281,6 @@ Describe those as future capabilities rather than implying they are present.
 Read [composition-runtime.md](COMPOSITION_RUNTIME.md) for compiled
 frame coverage, local/global timing, root particles, measured row/column groups,
 strict text fit/wrap, the local frame viewer and MCP render job lifecycle.
-Try `examples/product/composition.yaml` as a six-second technical diagnostic.
+Try `examples/technical/composition.yaml` as a six-second technical diagnostic.
 These are independently implemented Python capabilities, without a Remotion
 dependency. They do not automatically design coherent UI or certify creativity.

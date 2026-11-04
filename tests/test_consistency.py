@@ -46,7 +46,7 @@ def test_detected_dissolve_stays_within_a_tenth_of_the_cut(tmp_path):
 
 
 def test_zoom_rate_stays_within_twenty_percent_of_the_camera():
-    episode = load_episode(ROOT / "examples" / "styles" / "history-story.yaml")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")
     camera = episode.scenes[0].params["camera"]
     duration = 2.4
     expected = (camera["to"]["scale"] - camera["from"]["scale"]) / duration * 100.0
@@ -59,7 +59,7 @@ def test_history_text_is_full_within_two_tenths_and_two_to_three_times_larger():
     rules = RULES[HISTORY]
     assert 2.0 <= rules["text_size"] / 72.0 <= 3.0
     assert rules["text_fade_s"] == pytest.approx(0.15)
-    episode = load_episode(ROOT / "examples" / "styles" / "history-story.yaml")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")
     overlay = episode.scenes[0].params["overlays"][0]
     # Pinned schedule: the phrase is authored at 0.45s and the fade is 0.15s.
     full = overlay["at"] + overlay["fade"]
@@ -70,7 +70,7 @@ def test_history_text_is_full_within_two_tenths_and_two_to_three_times_larger():
 def test_history_voice_gap_is_zero_and_house_keeps_the_breath(tmp_path):
     assert RULES[HISTORY]["pad"] == 0 and RULES[HISTORY]["lead"] == 0
     assert RULES[HISTORY]["shot_min"] == pytest.approx(1.1)
-    history = load_episode(ROOT / "examples" / "styles" / "history-story.yaml")
+    history = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")
     assert theme_for(history).pad == 0 and theme_for(history).lead == 0
     house = tmp_path / "house.yaml"
     house.write_text("""
@@ -176,7 +176,7 @@ def test_prompt_template_overscan_and_image_qc(tmp_path):
     template = STYLE_PROMPTS[HISTORY].lower()
     for word in ("archival photo", "sepia", "grain", "vignette", "framing"):
         assert word in template
-    episode = load_episode(ROOT / "examples" / "styles" / "history-story.yaml")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")
     size = plate_pixel_size(episode.scenes[0].params["camera"])
     assert size["width"] >= 1080
     assert size["height"] >= 1920 + 2 * size["pan_y"]

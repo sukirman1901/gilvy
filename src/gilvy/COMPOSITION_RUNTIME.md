@@ -80,7 +80,7 @@ with `product_primitives.path_points` and convert each contour to point lists.
 Python scene with its own drawing and easing. Particle correspondence is an
 authored decision; equal density does not guarantee a good intermediate pose.
 
-See `examples/product/composition.yaml`: the same forty points change from
+See `examples/technical/composition.yaml`: the same forty points change from
 contour to grid to bars; labels have local clocks. This is a native compositor
 diagnostic, not the Bojonegoro episode or an approved visual standard.
 
@@ -120,9 +120,9 @@ range; it is measured at each rendered/inspected frame.
 ## CLI preview and MCP inspection
 
 ```bash
-gilvy serve-product examples/product/composition.yaml --port 8765
-gilvy inspect-product examples/product/composition.yaml --frame 90 --out out/frame-90.png
-gilvy render-product examples/product/composition.yaml --start 3 --duration 2 --out out/proof.mp4
+gilvy serve-product examples/technical/composition.yaml --port 8765
+gilvy inspect-product examples/technical/composition.yaml --frame 90 --out out/frame-90.png
+gilvy render-product examples/technical/composition.yaml --start 3 --duration 2 --out out/proof.mp4
 ```
 
 `serve-product` blocks until Ctrl+C and binds only to 127.0.0.1. Open the printed

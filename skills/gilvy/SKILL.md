@@ -67,7 +67,7 @@ Then pick a type whose verb is that verb. If none is, write a `python` scene. Th
 
 ## 2. How a directed cut behaves
 
-Study `examples/ep01-mie-ayam.yaml` for the directing, not for the topic.
+For a historical house study, read `references/house/README.md`. Test fixtures establish regression behavior, not a new creative direction.
 
 1. The bowl draws itself. Chopsticks follow. Steam starts. The price arrives only after the object exists.
 2. The same bowl stays. A coin falls into it. The sentence is an assumption. The picture is a fall.
@@ -184,7 +184,13 @@ The sections above are the house explainer. The camera stays still, and the pict
 
 ## Creative references and examples
 
-Read [references/creative-review.md](references/creative-review.md) when choosing a new metaphor or when a cut feels generic. It contains a weak/strong comparison, reference-study prompts, and the reflective `examples/reflection.yaml` motion proof. Transfer the relationship and timing principles; do not copy a third party's artwork or force every topic into a dot-and-circle story.
+Read `examples/README.md` and `docs/examples-audit.md` before reusing repository
+material. Test fixtures, technical diagrams, and preset UI screenshots are not
+creative masters. No bundled Vox/SaaS demo is approved as a reference match.
+Only `references/house/` preserves the earlier accepted house studies; that
+approval is scoped to those pieces. A new reference needs new art direction.
+
+Read [references/creative-review.md](references/creative-review.md) when choosing a new metaphor or when a cut feels generic. It contains a weak/strong comparison, reference-study prompts, and the reflective `references/house/reflection.yaml` motion proof. Transfer the relationship and timing principles; do not copy a third party's artwork or force every topic into a dot-and-circle story.
 
 Read [the visual vocabulary and Bojonegoro study](../../src/gilvy/MOTION_REFERENCE.md)
 when choosing people, fire, nature, buildings, or infrastructure, or continuing
@@ -258,7 +264,7 @@ Offline narrated layout checks use `--tts fixture`. Fixture is a tone, not a voi
 
 Read `docs/color-rule.md`. The rules that get videos rejected:
 
-- **Green is one focus idea.** The money figure, or the counted unit and the counter that repeats that same quantity. Two different ideas never share green. On `examples/ep01-mie-ayam.yaml`, QC reads about 2%, 0%, 10%, 8%, 29%, 0% at the six scenes. That spread is the rule, not a target to beat.
+- **Green is one focus idea.** The money figure, or the counted unit and the counter that repeats that same quantity. Two different ideas never share green. On `tests/fixtures/episodes/ep01-mie-ayam.yaml`, QC reads about 2%, 0%, 10%, 8%, 29%, 0% at the six scenes. That spread is the rule, not a target to beat.
 - **White is structure.** Bowls, rings, tracks, dots that are not the count, labels, captions. Glow is white light, not a second green shape.
 - **Setup and CTA may be entirely white.** A focus scene must actually show its green by 80% of the scene.
 - **Caption baseline is y=1290**, second line y=1368. That sits below the usual Meta safe zone on purpose. Do not move it.
@@ -281,7 +287,7 @@ A library verb runs until 65% of the scene, then holds. The entrance still finis
 
 When one scene is longer than 7 seconds, a small idle on the object that already landed starts only after that 65% mark. Compare dots, the highlighted bar, the jar levels, the converged ring, and the checklist each keep a local motion in that tail. The camera stays put.
 
-Prefer two beats of the same object over one 20-second scene. A hold is a pulse, not a new idea. Chain the picture the way `examples/ep01-mie-ayam.yaml` does: the bowl stays, the coin falls into it, the count continues with `count_from`, the same dots become the comparison, the bowl returns for the ask. Do not score a long sentence as `checklist`, `highlight`, or `timeline` unless the sentence is actually a list, a set of bars, or a date.
+Prefer two beats of the same object over one 20-second scene. A hold is a pulse, not a new idea. Chain the picture the way `tests/fixtures/episodes/ep01-mie-ayam.yaml` does: the bowl stays, the coin falls into it, the count continues with `count_from`, the same dots become the comparison, the bowl returns for the ask. Do not score a long sentence as `checklist`, `highlight`, or `timeline` unless the sentence is actually a list, a set of bars, or a date.
 
 ## Scene choice
 
@@ -311,7 +317,7 @@ Use this only after the directing pass above. The first column is a verb, not a 
 ```bash
 gilvy new ep02
 gilvy preview ep02/ep02.yaml --tts fixture
-gilvy render examples/ep01-mie-ayam.yaml
+gilvy render tests/fixtures/episodes/ep01-mie-ayam.yaml
 gilvy qc out/ep01-mie-ayam.mp4
 gilvy mcp
 ```
@@ -342,7 +348,7 @@ For `composition: collage`, use each asset's own prompt and the separate scene b
 
 5. Preview, watch a short motion proof, `gilvy render`, then `gilvy qc`. Legacy image plates must sit in the preset's shot-length and zoom band, and they must move. Zoom does not increase to make room for a pan. `history-story` has no intro fade, stacks emphasis words, allows a dissolve up to 2.0 s, and warns when a voice line is longer than its shot unless `vo_overrun: true`. A line that then overlaps the next voice is a warning too. Render writes `<name>.camera.json` (authored zoom and pan beside the values the camera applies). `gilvy compare` rescales different frame sizes and can cover the whole cut.
 
-Samples: `examples/styles/vox-explainer.yaml`, `examples/styles/history-story.yaml`. Their plates are procedural stand-ins.
+The old Vox/history sample plates are test-only fixtures in `tests/fixtures/episodes/styles/`. Do not use their artwork, layout or timing as a reference match. Study the supplied video and author a fresh composition.
 - **Claude Code.** `.mcp.json`:
 
 ```json
@@ -353,4 +359,4 @@ Samples: `examples/styles/vox-explainer.yaml`, `examples/styles/history-story.ya
 
 Call `list_scene_types` before inventing a type name. After `render_video`, read `ok` and `qc.violations`. A failed technical QC needs diagnosis: a second green idea, a caption that went green, a `min` that left a hole, or a focus that never appeared. Fix the episode or custom scene as appropriate and render again. A successful output is not automatically creatively approved.
 
-Examples: `examples/ep01-mie-ayam.yaml` (Indonesian), `examples/day30-january.yaml` (English, no green), `examples/custom.yaml` (python escape hatch).
+API example: `examples/custom.yaml` (Python escape hatch). Old language/style episodes are regression fixtures, not visual masters.

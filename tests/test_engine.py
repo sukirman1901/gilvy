@@ -72,7 +72,7 @@ def test_engine_matches_oracle_on_day30():
     original = load_original()
     clear_font_cache()
     original._fc.clear()
-    episode = _episode_from_yaml(ROOT / "examples" / "day30-january.yaml")
+    episode = _episode_from_yaml(ROOT / "tests/fixtures/episodes" / "day30-january.yaml")
     durations = [scene.min for scene in episode.scenes]
     sc = load_scene("day30_draw.py", namespace())
     state = _gilvy_bytes(episode, durations, impl=sc)
@@ -96,7 +96,7 @@ def test_yaml_scenes_match_original_episodes():
     )
     digests = {}
     for yaml_name, draw_name in cases:
-        episode = _episode_from_yaml(ROOT / "examples" / yaml_name)
+        episode = _episode_from_yaml(ROOT / "tests/fixtures/episodes" / yaml_name)
         durations = [scene.min for scene in episode.scenes]
         state = build_state(episode, durations)
         video = _arm_original(
@@ -119,7 +119,7 @@ def test_ep01_green_ratios_follow_the_color_rule():
     """Frames at 80% of the recorded scene lengths. Bands are the measured style, not a guess."""
     from gilvy.qc import green_ratio
 
-    episode = load_episode(ROOT / "examples" / "ep01-mie-ayam.yaml")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "ep01-mie-ayam.yaml")
     # Recorded ep01 scene lengths (seconds): 4.78, 4.32, 6.21, 6.12, 5.88, 5.59.
     durations = [4.78, 4.32, 6.21, 6.12, 5.88, 5.59]
     state = build_state(episode, durations)

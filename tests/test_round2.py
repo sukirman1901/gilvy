@@ -118,7 +118,7 @@ def test_exponential_zoom_holds_a_constant_relative_rate():
 
 
 def test_history_does_not_fade_in_from_black():
-    episode = load_episode(ROOT / "examples" / "styles" / "history-story.yaml")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")
     assert theme_for(episode).intro == 0
     state = build_state(episode, [scene.min for scene in episode.scenes])
     assert float(state.frame_array(0).mean()) > 15
