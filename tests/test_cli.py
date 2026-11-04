@@ -33,7 +33,10 @@ def test_directing_notes_are_what_the_skill_loads():
     skill = Path(__file__).resolve().parents[1].joinpath("skills", "gilvy", "SKILL.md").read_text(encoding="utf-8")
     assert "You are the director" in notes
     assert "python" in notes
-    assert notes.strip() in skill
+    assert 'directing_notes' in skill
+    assert 'references/house.md' in skill
+    house = Path(__file__).resolve().parents[1].joinpath('skills', 'gilvy', 'references', 'house.md').read_text()
+    assert 'directing_notes' in house and 'list_scene_types' in house
 
 
 def test_scene_catalog_lists_the_library():

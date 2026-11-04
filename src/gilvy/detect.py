@@ -11,7 +11,6 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 
 from gilvy.keyframes import apply_ease
 
@@ -395,7 +394,12 @@ def _aligned_ncc(earlier: np.ndarray, later: np.ndarray, scale: float) -> float:
 
 
 def _phase_shift(src: np.ndarray, dst: np.ndarray) -> tuple[float, float]:
-    """Pixels to move `src` (x right, y down) so it lines up with `dst`."""
+    """Translation candidate selected by overlap NCC, in content pixels.
+
+    Whitened phase correlation is useful on texture, but amplifies weak/noisy
+    frequencies on smooth plates. Also propose the bounded, unwhitened peak
+    used by measure's correlation approach; score both against actual pixels.
+    """
     a = src.astype(np.float32)
     b = dst.astype(np.float32)
     a -= float(a.mean())
@@ -410,7 +414,21 @@ def _phase_shift(src: np.ndarray, dst: np.ndarray) -> tuple[float, float]:
         iy -= height
     if ix > width // 2:
         ix -= width
-    return float(ix), float(iy)
+    raw = np.fft.irfft2(np.fft.rfft2(b) * np.conj(np.fft.rfft2(a)), s=a.shape)
+    span = min(12, height // 3, width // 3)
+    offsets = np.arange(-span, span + 1)
+    local = raw[np.ix_(offsets % height, offsets % width)]
+    cy, cx = np.unravel_index(int(local.argmax()), local.shape)
+    candidates = {(int(ix), int(iy)), (int(offsets[cx]), int(offsets[cy])), (0, 0)}
+    best, best_score = (0, 0), -1.0
+    for dx, dy in sorted(candidates):
+        if abs(dx) > width * 0.4 or abs(dy) > height * 0.4:
+            continue
+        shifted, mask = _shift(src, dx, dy)
+        score = _ncc(shifted, dst, mask)
+        if score > best_score:
+            best, best_score = (dx, dy), score
+    return float(best[0]), float(best[1])
 
 
 def _shift(image: np.ndarray, dx: float, dy: float) -> tuple[np.ndarray, np.ndarray]:
@@ -516,20 +534,26 @@ def _patch(gray: np.ndarray, x: int, y: int, radius: int = 4) -> np.ndarray | No
 
 
 def _resize_center(frame: np.ndarray, scale: float) -> np.ndarray:
+    """Sample around the pixel center without rounding the scaled dimensions.
+
+    Integer resize/crop makes tiny zooms share identical scores and alternates
+    half-pixel center offsets. Keep both coordinates and luma subpixel instead.
+    """
     if abs(scale - 1) < 1e-4:
         return frame.astype(np.float32)
-    image = Image.fromarray(np.clip(frame, 0, 255).astype(np.uint8))
-    w, h = image.size
-    nw, nh = max(2, int(round(w * scale))), max(2, int(round(h * scale)))
-    resized = np.asarray(image.resize((nw, nh), Image.Resampling.BILINEAR), np.float32)
-    canvas = np.zeros(frame.shape, np.float32)
-    y0 = max(0, (nh - h) // 2)
-    x0 = max(0, (nw - w) // 2)
-    y1 = max(0, (h - nh) // 2)
-    x1 = max(0, (w - nw) // 2)
-    src = resized[y0:y0 + (h - 2 * y1), x0:x0 + (w - 2 * x1)]
-    canvas[y1:y1 + src.shape[0], x1:x1 + src.shape[1]] = src
-    return canvas
+    h, w = frame.shape
+    yy, xx = np.mgrid[:h, :w].astype(np.float32)
+    sy = np.clip((yy - (h - 1) / 2) / scale + (h - 1) / 2, 0, h - 1)
+    sx = np.clip((xx - (w - 1) / 2) / scale + (w - 1) / 2, 0, w - 1)
+    y0, x0 = sy.astype(int), sx.astype(int)
+    y1, x1 = np.minimum(y0 + 1, h - 1), np.minimum(x0 + 1, w - 1)
+    wy, wx = sy - y0, sx - x0
+    return (
+        frame[y0, x0] * (1 - wy) * (1 - wx)
+        + frame[y0, x1] * (1 - wy) * wx
+        + frame[y1, x0] * wy * (1 - wx)
+        + frame[y1, x1] * wy * wx
+    ).astype(np.float32)
 
 
 def _rotation(frames: np.ndarray) -> float:
@@ -740,13 +764,33 @@ def _alpha_time(alphas: np.ndarray, level: float, fps: float) -> float | None:
 
 
 def _word_times(frames: np.ndarray, fps: float) -> list[float]:
-    white = ((frames[:, :, :, 0] > 210) & (frames[:, :, :, 1] > 210) & (frames[:, :, :, 2] > 210)).sum(axis=(1, 2))
+    """Abrupt, localized white-ink additions that persist for two more frames.
+
+    Count new pixels, not only net ink: fitting another word can shrink the
+    existing text. Persistence rejects flashes; luma contrast rejects a gradual
+    fade crossing the white threshold. This is an arrival heuristic, not OCR.
+    """
+    if len(frames) < 4 or fps <= 0:
+        return []
+    masks = np.all(frames > 210, axis=3)
+    white = masks.sum(axis=(1, 2)).astype(float)
     if white.max() < 30:
         return []
     jumps = []
-    for i in range(1, len(white)):
-        if white[i] - white[i - 1] > max(20, 0.25 * white.max()):
-            jumps.append(round(i / fps, 4))
+    for i in range(1, len(white) - 2):
+        if white[i] - white[i - 1] <= 20:
+            continue
+        added = masks[i] & ~masks[i - 1] & masks[i + 1] & masks[i + 2]
+        if added.sum() <= max(20, 0.25 * white[i]):
+            continue
+        ys, xs = np.nonzero(added)
+        area = (ys.max() - ys.min() + 1) * (xs.max() - xs.min() + 1)
+        if area > 0.35 * added.size:
+            continue
+        change = frames[i].astype(float) - frames[i - 1].astype(float)
+        if float(change[added].mean()) < 40:
+            continue
+        jumps.append(round(i / fps, 4))
     return jumps
 
 

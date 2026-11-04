@@ -50,7 +50,7 @@ _FONTS_NAMED = {"serif", "sans"}
 MEASURED_RED = (178, 74, 66)
 
 
-def parse_image_params(raw: dict, index: int, style: str) -> dict:
+def parse_image_params(raw: dict, index: int, style: str, *, timing_final: bool = True) -> dict:
     """Validate one image scene's extra fields. Paths are not required to exist yet."""
     if style not in PHOTO_PRESETS:
         raise EpisodeError(
@@ -67,7 +67,7 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
     params["layers"] = layers
     params["camera"] = _camera(raw.get("camera"), index, rules)
     grade = raw.get("grade", "none" if composition == "collage" else rules["default_grade"])
-    if grade not in _GRADES:
+    if not isinstance(grade, str) or grade not in _GRADES:
         raise EpisodeError(f"scene {index}: grade must be none, sepia, or paper")
     params["grade"] = grade
     params["grain"] = _unit(raw.get("grain", 0 if composition == "collage" else rules["default_grain"]), index, "grain")
@@ -80,18 +80,18 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         raise EpisodeError(f"scene {index}: show_caption must be true or false")
     params["show_caption"] = show
     kind = raw.get("transition_out", rules["default_transition"])
-    if kind not in _TRANSITIONS:
+    if not isinstance(kind, str) or kind not in _TRANSITIONS:
         raise EpisodeError(f"scene {index}: transition_out must be cut, dissolve, zoom, or match")
     params["transition_out"] = kind
     params["match_tracks"] = _match_tracks(raw.get("match"), index) if kind == "match" else {}
     if kind == "cut":
-        seconds = float(raw.get("transition") or 0)
+        seconds = _num(raw.get("transition", 0), index, "transition", 0, 4)
     elif kind == "match" and raw.get("transition") is None:
         seconds = 0.40
     elif raw.get("transition") is None:
         seconds = 0.30 if kind == "zoom" else max(0.40, float(rules["default_transition_s"] or 0.40))
     else:
-        seconds = float(raw["transition"])
+        seconds = _num(raw["transition"], index, "transition", 0, 4)
     ease_name = raw.get("transition_ease") or "linear"
     if ease_name not in EASES and ease_name != "linear":
         raise EpisodeError(f"scene {index}: transition_ease must be a track ease")
@@ -107,22 +107,52 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         raise EpisodeError(f"scene {index}: prompt must be a string")
     params["prompt"] = prompt.strip()
     params["text_fade_s"] = _fade_seconds(raw.get("text_fade_s", rules["text_fade_s"]), index)
-    params["overlays"] = _overlays(raw.get("overlays") or [], index, rules, params["text_fade_s"])
+    params["overlays"] = _overlays(raw.get("overlays", []), index, rules, params["text_fade_s"])
     placed_ids = {layer["id"] for layer in layers if "placement" in layer}
     for overlay in params["overlays"]:
         if overlay.get("parent") is not None and overlay["parent"] not in placed_ids:
             raise EpisodeError(f"scene {index}: overlay parent must name a placed layer")
     params["effects"] = parse_effects(raw.get("effects"), index)
-    if composition != "collage":
-        _metrics_or_raise(params["camera"], index, style)
+    if composition != "collage" and timing_final:
+        duration = raw.get("min")
+        if duration is None:
+            duration = max((key["t"] for keys in params["camera"]["tracks"].values() for key in keys), default=2.5)
+        _metrics_or_raise(params["camera"], index, style, float(duration))
     return params
+
+
+def camera_path(camera: dict, duration: float) -> list[tuple[float, dict]]:
+    """Sample every segment, including exact keys and cubic-bezier extrema.
+
+    Segment-local sampling prevents a short or delayed move from disappearing
+    between global samples. Peak derivatives are numerical estimates (256 steps).
+    """
+    times = {0.0, float(duration)}
+    for keys in (camera.get("tracks") or {}).values():
+        times.update(float(k["t"]) for k in keys if 0 <= k["t"] <= duration)
+        for a, b in zip(keys, keys[1:]):
+            if a.get("ease") != "cubic-bezier":
+                continue
+            x1, y1, x2, y2 = a["bezier"]
+            # dy/ds = 3 * (A*s² + B*s + C).
+            roots = np.roots([1 + 3*y1 - 3*y2, 2*y2 - 4*y1, y1])
+            for root in roots:
+                if np.isreal(root) and 0 < float(root.real) < 1:
+                    s = float(root.real)
+                    x = 3*(1-s)**2*s*x1 + 3*(1-s)*s*s*x2 + s**3
+                    t = a["t"] + (b["t"]-a["t"])*x
+                    if 0 < t < duration:
+                        times.add(t)
+    boundaries = sorted(times)
+    for a, b in zip(boundaries, boundaries[1:]):
+        times.update(float(t) for t in np.linspace(a, b, 257))
+    return [(t, camera_pose(camera, t, duration)) for t in sorted(times)]
 
 
 def camera_metrics(camera: dict, duration: float) -> dict:
     """Plate rates. Exponential zoom reports the constant relative %/s a measurement sees.
 
-    Explicit tracks are sampled at the ends, so a multi-key move is the rate
-    from the first key to the last rather than only `from`/`to`.
+    Keep legacy signed endpoint rates, alongside full-path travel and peaks.
     """
     duration = max(float(duration), 1e-6)
     s0, x0, y0 = _camera_at(camera, 0.0, duration)
@@ -136,13 +166,32 @@ def camera_metrics(camera: dict, duration: float) -> dict:
     spun = 0.0
     if "rotation" in (camera.get("tracks") or {}):
         spun = abs(sample_keys(camera["tracks"]["rotation"], duration, duration) - sample_keys(camera["tracks"]["rotation"], 0.0, duration))
-    moving = abs(zoom) >= 0.4 or math.hypot(pan_x, pan_y) >= 6.0 or spun >= 0.4
+    path = camera_path(camera, duration)
+    travel = {prop: 0.0 for prop in ("scale", "x", "y", "rotation")}
+    peak_zoom = peak_pan = 0.0
+    zoom_min = zoom_max = 0.0
+    for (ta, a), (tb, b) in zip(path, path[1:]):
+        dt = tb - ta
+        for prop in travel:
+            travel[prop] += abs(b[prop] - a[prop])
+        rate = (b["scale"] - a["scale"]) / dt * 100
+        peak_zoom = max(peak_zoom, abs(rate))
+        zoom_min, zoom_max = min(zoom_min, rate), max(zoom_max, rate)
+        peak_pan = max(peak_pan, math.hypot(b["x"]-a["x"], b["y"]-a["y"]) / dt)
+    moving = travel["scale"] >= .004 or math.hypot(travel["x"], travel["y"]) >= 6 or travel["rotation"] >= .4
     return {
         "ease": camera["ease"],
         "duration": round(duration, 4),
         "zoom_pct_per_s": round(zoom, 4),
         "pan_px_per_s": {"x": round(pan_x, 3), "y": round(pan_y, 3)},
         "static": not moving,
+        "travel": travel,
+        "peak_zoom_pct_per_s": round(peak_zoom, 4),
+        "peak_push_pct_per_s": round(zoom_max, 4),
+        "peak_pull_pct_per_s": round(abs(zoom_min), 4),
+        "peak_pan_px_per_s": round(peak_pan, 3),
+        "explicit_tracks": bool(camera.get("tracks")),
+        "peak_method": "segment-local finite differences (256 subdivisions)",
     }
 
 
@@ -172,6 +221,17 @@ def overlay_start(overlay: dict, vo: str, duration: float, style: str) -> float:
     return max(0.0, base + lead)
 
 
+def overlay_event(overlay: dict, vo: str, duration: float, style: str, scene_start: float) -> dict:
+    """Resolve the visual onset into both clocks for audio and metadata consumers."""
+    onset = overlay_start(overlay, vo, duration, style)
+    clock = overlay.get("clock", "scene")
+    episode_at = onset if clock == "episode" else scene_start + onset
+    return {"at": onset, "clock": clock, "episode_at": episode_at,
+            "scene_at": episode_at - scene_start, "event_id": overlay.get("event_id"),
+            "timing": "keyword_estimate" if overlay.get("keyword") and overlay.get("at") is None else "explicit",
+            "sfx": overlay.get("sfx")}
+
+
 def render_image_frame(theme, scene: dict, u: float, duration: float, episode_dir: str, *, scene_start: float = 0, episode_time: float | None = None) -> np.ndarray:
     """One RGB float32 frame at the theme's delivery size."""
     params = scene["params"]
@@ -194,12 +254,14 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
     for layer in params["layers"]:
         if "placement" in layer:
             def paint_attached(plane):
-                pen = ImageDraw.Draw(plane)
                 for item in params["overlays"]:
                     if item.get("parent") != layer["id"]: continue
+                    annotation = Image.new("RGBA", plane.size, (0, 0, 0, 0))
+                    pen = ImageDraw.Draw(annotation)
                     time = track_time(item, u, scene_start, episode_time)
                     start = overlay_start(item, scene.get("vo") or "", duration, scene.get("style") or VOX)
-                    _draw_overlay(pen, plane, item, time, start, theme, theme.fit.ox, theme.fit.oy, episode_dir)
+                    _draw_overlay(pen, annotation, item, time, start, theme, theme.fit.ox, theme.fit.oy, episode_dir)
+                    plane.alpha_composite(annotation)
             blit_fragment(plate, _load(Path(episode_dir) / layer["src"]), layer, pose, u, duration, theme.fit.scale, scene_start, shake, episode_time, paint_attached)
             continue
         gain = 0.25 + 0.75 * float(layer["depth"])
@@ -763,14 +825,14 @@ def _layers(raw: dict, index: int) -> list[dict]:
 
 
 def _camera(raw, index: int, rules: dict) -> dict:
-    raw = raw or {}
+    raw = {} if raw is None else raw
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index}: camera must be a mapping")
     ease = raw.get("ease", rules["default_ease"])
-    if ease not in _EASE:
+    if not isinstance(ease, str) or ease not in _EASE:
         raise EpisodeError(f"scene {index}: camera.ease must be linear, ease-out, ease-in-out, exponential, or a track ease")
     preset = float(rules.get("scale_max", 2.4))
-    limit = float(raw.get("scale_max", preset))
+    limit = _num(raw.get("scale_max", preset), index, "camera.scale_max", preset, 4)
     if not math.isfinite(limit) or not preset <= limit <= 4.0:
         raise EpisodeError(f"scene {index}: scale_max must be from {preset} to 4")
     return {
@@ -801,13 +863,27 @@ def _fade_seconds(value, index: int) -> float:
 
 
 def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
+    if not isinstance(raw, list) or len(raw) > 8:
+        raise EpisodeError(f"scene {index}: overlays must be a list of at most 8 items",
+                           field=f"scenes[{index - 1}].overlays")
+    out = []
+    for i, item in enumerate(raw):
+        try:
+            out.extend(_parse_overlays([item], index, rules, fade_s))
+        except EpisodeError as exc:
+            suffix = f".{exc.field}" if exc.field else ""
+            raise EpisodeError(str(exc), field=f"scenes[{index - 1}].overlays[{i}]{suffix}") from exc
+    return out
+
+
+def _parse_overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
     if not isinstance(raw, list):
         raise EpisodeError(f"scene {index}: overlays must be a list")
     if len(raw) > 8:
         raise EpisodeError(f"scene {index}: at most 8 overlays")
     out = []
     for i, item in enumerate(raw):
-        if not isinstance(item, dict) or item.get("kind") not in _OVERLAYS:
+        if not isinstance(item, dict) or not isinstance(item.get("kind"), str) or item.get("kind") not in _OVERLAYS:
             raise EpisodeError(
                 f"scene {index}: overlay {i + 1} kind must be text, headline, tag, chip, card, highlighter, circle, arrow, strike, mask, or stamp"
             )
@@ -820,6 +896,13 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
         if item.get("clock", "scene") not in ("scene", "episode"):
             raise EpisodeError(f"scene {index}: overlay clock must be scene or episode")
         if "clock" in item: parsed["clock"] = item["clock"]
+        if "event_id" in item:
+            event_id = item["event_id"]
+            if not isinstance(event_id, str) or not event_id.strip() or len(event_id) > 128:
+                raise EpisodeError(f"scene {index}: event_id must be nonempty text up to 128 characters", field="event_id")
+            if parsed.get("clock") != "episode" or not item.get("sfx"):
+                raise EpisodeError(f"scene {index}: event_id requires an episode-clock SFX", field="event_id")
+            parsed["event_id"] = event_id
         if parsed.get("clock") == "episode" and item.get("at") is None:
             raise EpisodeError(f"scene {index}: episode-clock overlay requires explicit at")
         if item.get("at") is not None:
@@ -835,7 +918,7 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
                 raise EpisodeError(f"scene {index}: text overlay needs text")
             entrance = item.get("entrance", rules["text_entrance"])
             font = item.get("font", "serif" if rules is RULES[HISTORY] else "sans")
-            if entrance not in _ENTRANCES or font not in _FONTS_NAMED:
+            if not isinstance(entrance, str) or not isinstance(font, str) or entrance not in _ENTRANCES or font not in _FONTS_NAMED:
                 raise EpisodeError(
                     f"scene {index}: text entrance must be fade, pop, slide, or typewriter; font must be serif or sans"
                 )
@@ -898,20 +981,21 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
         elif kind == "highlighter":
             parsed.update(duration=_seconds(item.get("duration", 0.40), index, "duration"),
                           ease=_overlay_ease(item.get("ease"), index),
-                          x=_num(item["x"], index, "x", -200, 1400),
-                          y=_num(item["y"], index, "y", -200, 2100),
-                          w=_num(item["w"], index, "w", 1, 1200),
-                          h=_num(item["h"], index, "h", 1, 400))
+                          x=_num(item.get("x"), index, "x", -200, 1400),
+                          y=_num(item.get("y"), index, "y", -200, 2100),
+                          w=_num(item.get("w"), index, "w", 1, 1200),
+                          h=_num(item.get("h"), index, "h", 1, 400))
         elif kind == "circle":
             parsed.update(duration=_seconds(item.get("duration", 0.80), index, "duration"),
                           ease=_overlay_ease(item.get("ease"), index),
                           cx=_num(item.get("cx", item.get("x")), index, "cx", -200, 1400),
                           cy=_num(item.get("cy", item.get("y")), index, "cy", -200, 2100),
-                          r=_num(item["r"], index, "r", 4, 800),
+                          r=_num(item.get("r"), index, "r", 4, 800),
                           width=_num(item.get("width", 8), index, "width", 1, 40))
         elif kind == "arrow":
             points = item.get("points")
-            if not isinstance(points, list) or len(points) < 2:
+            if (not isinstance(points, list) or len(points) < 2
+                    or any(not isinstance(p, (list, tuple)) or len(p) != 2 for p in points)):
                 raise EpisodeError(f"scene {index}: arrow overlay needs at least two points")
             parsed["points"] = [(_num(p[0], index, "x", -200, 1400), _num(p[1], index, "y", -200, 2100)) for p in points]
             parsed["duration"] = _seconds(item.get("duration", 0.50), index, "duration")
@@ -936,9 +1020,8 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
     return out
 
 
-def _metrics_or_raise(camera, index, style):
-    # Use a representative 2.5s plate so a frozen camera fails at load, before render.
-    metrics = camera_metrics(camera, 2.5)
+def _metrics_or_raise(camera, index, style, duration):
+    metrics = camera_metrics(camera, duration)
     if metrics["static"]:
         raise EpisodeError(
             f"scene {index}: camera from and to are the same. {style} image plates have to push, pull, or pan."
@@ -961,12 +1044,13 @@ def _color_tracks(raw, index: int) -> dict:
         raise EpisodeError(f"scene {index}: color.tracks must be a list")
     bounds = {"hue": (-180.0, 180.0), "sat": (0.0, 3.0), "bright": (0.0, 3.0)}
     out = {}
-    for item in tracks:
+    for position, item in enumerate(tracks):
         if not isinstance(item, dict):
             raise EpisodeError(f"scene {index}: a color track must be a mapping")
         prop = item.get("property")
-        if prop not in bounds:
-            raise EpisodeError(f"scene {index}: color property must be hue, sat, or bright")
+        if not isinstance(prop, str) or prop not in bounds:
+            raise EpisodeError(f"scene {index}: color property must be hue, sat, or bright",
+                               field=f"scenes[{index - 1}].color.tracks[{position}].property")
         keys = item.get("keys")
         if not isinstance(keys, list) or len(keys) < 2:
             raise EpisodeError(f"scene {index}: color track {prop} needs at least two keys")
@@ -1028,7 +1112,7 @@ def _seconds(value, index, name) -> float:
 
 def _num(value, index, name, lo, hi) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or not lo <= float(value) <= hi:
-        raise EpisodeError(f"scene {index}: {name} must be from {lo} to {hi}")
+        raise EpisodeError(f"scene {index}: {name} must be from {lo} to {hi}", field=name)
     return float(value)
 
 

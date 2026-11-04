@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -68,11 +69,14 @@ class QCReport:
     silence_gaps: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     audio_mode: str = "voiceover"
+    scope: str = "technical"
+    status: str = "checked"
 
     def to_dict(self) -> dict:
         return {
             "ok": self.ok,
-            "scope": "technical",
+            "scope": self.scope,
+            "status": self.status,
             "creative_review": "not_evaluated",
             "audio_mode": self.audio_mode,
             "video": self.video,
@@ -298,6 +302,9 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
     video = Path(path)
     if not video.is_file():
         raise GilvyError(f"video not found: {video}")
+    product_sidecar = video.with_suffix(".product.json")
+    if timeline is None and product_sidecar.is_file():
+        return _qc_product(video, product_sidecar, audio_mode)
     probed = _probe(video)
     streams = probed.get("streams") or []
     picture = next((s for s in streams if s.get("codec_type") == "video"), None)
@@ -309,6 +316,12 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
     duration = float((probed.get("format") or {}).get("duration") or 0)
     report = QCReport(ok=True, video=str(video), duration=duration, width=width, height=height)
     meta = _load_timeline(video, timeline)
+    if meta is None and audio_mode is None:
+        report.ok = False
+        report.status = "needs_context"
+        report.audio_mode = "unknown"
+        report.violations.append("QC needs context: provide a house timeline/audio_mode or a product sidecar")
+        return report
     check_green = checks_green((meta or {}).get("style"))
 
     mode = audio_mode or (meta or {}).get("audio_mode", "voiceover")
@@ -422,5 +435,51 @@ def qc_video(path: str | Path, timeline: str | None = None, audio_mode: str | No
         if item not in deduped:
             deduped.append(item)
     report.violations = deduped
+    report.ok = not report.violations
+    return report
+
+
+def _qc_product(video: Path, sidecar: Path, audio_mode: str | None) -> QCReport:
+    """Recheck the encoded artifact, never trust the cached QC verdict."""
+    try:
+        meta = json.loads(sidecar.read_text(encoding="utf-8"))
+        if not isinstance(meta, dict) or meta.get("style") != "product":
+            raise ValueError("expected product metadata")
+        for field in ("width", "height", "frames", "fps"):
+            if type(meta.get(field)) is not int or meta[field] <= 0:
+                raise ValueError(f"{field} must be a positive integer")
+        expected_duration = float(meta["duration"])
+        if not math.isfinite(expected_duration) or expected_duration <= 0:
+            raise ValueError("invalid duration")
+        mode = meta["audio_mode"]
+        if mode not in {"file", "silent"}:
+            raise ValueError("invalid product audio_mode")
+        probe = subprocess.run([
+            "ffprobe", "-v", "error", "-count_frames", "-show_entries",
+            "stream=codec_type,width,height,nb_read_frames,avg_frame_rate:format=duration",
+            "-of", "json", str(video)], capture_output=True, text=True, timeout=120, check=True)
+        info = json.loads(probe.stdout)
+        picture = next(s for s in info["streams"] if s["codec_type"] == "video")
+        duration = float(info["format"]["duration"])
+        width, height = int(picture["width"]), int(picture["height"])
+        frames = int(picture["nb_read_frames"])
+        numerator, denominator = picture["avg_frame_rate"].split("/")
+        fps = float(numerator) / float(denominator)
+        audio = any(s["codec_type"] == "audio" for s in info["streams"])
+    except (OSError, ValueError, TypeError, KeyError, StopIteration, ZeroDivisionError, subprocess.SubprocessError) as exc:
+        raise GilvyError(f"could not validate product artifact: {exc}", code="invalid_artifact") from exc
+    report = QCReport(True, str(video), duration, width, height, audio_mode=mode, scope="technical_integrity")
+    checks = [(frames == meta["frames"], "frame count"),
+              ((width, height) == (meta["width"], meta["height"]), "dimensions"),
+              (abs(duration - expected_duration) < .15, "duration"),
+              (abs(fps - meta["fps"]) < 1e-6, "frame rate"),
+              (abs(meta["frames"] / meta["fps"] - expected_duration) < 1e-6, "metadata frame clock"),
+              (audio == (mode == "file"), "audio stream"),
+              (not probe.stderr.strip(), "decode integrity")]
+    if audio_mode is not None and audio_mode != mode:
+        report.violations.append("audio_mode override conflicts with product sidecar")
+    for ok, name in checks:
+        if not ok:
+            report.violations.append(f"product {name} integrity check failed")
     report.ok = not report.violations
     return report

@@ -195,6 +195,18 @@ cover them naturally. Overlays without parent remain screen-space overlays.
 Overlay `clock` is explicitly scene or episode, independently of its parent.
 To continue an annotation across scenes, reuse it and select episode clock;
 do not assume inheriting geometry also inherits entrance timing. Episode-clock overlays require explicit `at` in 0..600 seconds; hold/draw durations retain existing limits.
+SFX uses the same onset clock: an episode `at: 2.5` remains 2.5 seconds even
+when the containing scene starts at 2 seconds. For a sounded annotation repeated
+across shots, set the same explicit `event_id` on every declaration. This field
+requires `clock: episode` and `sfx`; repeated IDs must agree on `at` and cue name.
+The soundtrack emits that identity once. Different IDs, or annotations without
+an ID, remain distinct events even when their times and cue names coincide.
+Timeline metadata records both `scene_at` and `episode_at`, the declared `clock`,
+and the optional identity. Keyword onsets remain labeled estimates.
+
+Attached annotations are source-over composited in list order onto the parent
+plane before projection. A translucent marker therefore blends with the paper's
+colour and preserves opaque paper alpha, rather than punching transparency into it.
 `text.layout: line` keeps an editable phrase on one line. Existing default
 `stack` retains one word per line. Text fitting and readability still require
 native inspection; a successful fit is not a hierarchy decision.
@@ -204,9 +216,11 @@ native inspection; a successful fit is not a hierarchy decision.
 `gilvy assets` / MCP `asset_manifest` returns ID, role, clock, placement,
 per-asset prompt, separate scene brief, and estimated source dimensions. A
 fragment needs resolution for its authored dimensions and peak scale, not
-full-frame pan overscan. Plate overscan now includes intermediate camera keys.
-These estimates use key extrema; Bezier overshoot and unusual framing need
-additional margin and inspection.
+full-frame pan overscan. Fragment scale envelopes include cubic-bezier extrema,
+not just key values; plate envelopes include camera-track extrema and a
+conservative rotation bound. Attached card sources are listed separately with
+their parent and field location, and inherit the parent's scale envelope.
+Unusual framing still needs inspection; sizing estimates do not judge composition.
 
 Existing collage assets are decoded and checked for empty alpha, required
 transparency/opacity, file decodability and a 16-megapixel budget per asset. Invalid

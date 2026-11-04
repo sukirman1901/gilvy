@@ -84,6 +84,32 @@ def sample_keys(keys: list[dict], time: float, duration: float) -> float:
     return float(keys[-1]["v"])
 
 
+def track_bounds(keys: list[dict]) -> tuple[float, float]:
+    """Exact value envelope over a track, including cubic-bezier y extrema.
+
+    Named eases are monotonic. Bezier time controls change when the extrema
+    occur, but not their values, so no temporal sampling can miss a narrow peak.
+    """
+    if not keys:
+        raise ValueError("track bounds require keys")
+    values = [float(key["v"]) for key in keys]
+    for a, b in zip(keys, keys[1:]):
+        if a.get("ease") != "cubic-bezier":
+            continue
+        _, y1, _, y2 = a["bezier"]
+        qa, qb, qc = 1 + 3*y1 - 3*y2, 2*y2 - 4*y1, y1
+        if abs(qa) < 1e-12:
+            roots = [-qc/qb] if abs(qb) > 1e-12 else []
+        else:
+            discriminant = qb*qb - 4*qa*qc
+            roots = [] if discriminant < 0 else [(-qb + sign*math.sqrt(discriminant))/(2*qa) for sign in (-1, 1)]
+        for s in roots:
+            if 0 < s < 1:
+                eased = 3*(1-s)**2*s*y1 + 3*(1-s)*s*s*y2 + s**3
+                values.append(a["v"] + (b["v"]-a["v"])*eased)
+    return min(values), max(values)
+
+
 def parse_tracks(raw, index: int, scale_max: float, *, time_limit: float = 30, scale_min: float = .5) -> dict[str, list[dict]]:
     if raw is None:
         return {}
@@ -131,12 +157,11 @@ def _key(raw, index: int, prop: str, scale_max: float, time_limit: float = 30, s
         points = raw.get("bezier")
         if not isinstance(points, (list, tuple)) or len(points) != 4:
             raise EpisodeError(f"scene {index}: cubic-bezier needs bezier: [x1, y1, x2, y2]")
-        try:
-            bezier = tuple(float(n) for n in points)
-        except (ValueError, TypeError) as exc:
-            raise EpisodeError(f"scene {index}: invalid cubic-bezier control values") from exc
-        if not all(math.isfinite(n) for n in bezier) or not 0 <= bezier[0] <= 1 or not 0 <= bezier[2] <= 1:
-            raise EpisodeError(f"scene {index}: Bezier x controls must be 0..1 and all controls finite")
+        if any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in points):
+            raise EpisodeError(f"scene {index}: bezier points must be finite numbers")
+        bezier = tuple(float(n) for n in points)
+        if not 0 <= bezier[0] <= 1 or not 0 <= bezier[2] <= 1:
+            raise EpisodeError(f"scene {index}: bezier x coordinates must be from 0 to 1")
     if prop == "scale" and not scale_min <= v <= scale_max:
         raise EpisodeError(f"scene {index}: scale key must be from {scale_min} to {scale_max}")
     if prop == "opacity" and not 0 <= v <= 1:

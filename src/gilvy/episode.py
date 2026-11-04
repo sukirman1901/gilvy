@@ -17,7 +17,7 @@ from gilvy.scenes import DOT_CAP, SCENES
 from gilvy.theme import BG, GREEN, MIN_DURATION, WHITE
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
-_RATE = re.compile(r"^[+-]\d+(%|Hz)$")
+_RATE = re.compile(r"^[+-]\d+%$")
 _VOICES = {
     "en-US": "en-US-AndrewNeural",
     "id-ID": "id-ID-ArdiNeural",
@@ -147,23 +147,26 @@ def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE, v
         raise EpisodeError(f"scene {index}: set min explicitly for {audio_mode} reading time")
     green = raw.get("green")
     if green is not None:
-        if green not in _GREEN:
+        if not isinstance(green, str) or green not in _GREEN:
             raise EpisodeError(f"scene {index}: green must be one of none, focus, any")
     entry = raw.get("entry")
+    overrun = raw.get("vo_overrun", vo_overrun)
+    if not isinstance(overrun, bool):
+        raise EpisodeError(f"scene {index}: vo_overrun must be true or false")
     params = {}
     for key, value in raw.items():
         if key in _RESERVED:
             continue
         if key in _INTS:
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise EpisodeError(f"scene {index}: {key} must be a number")
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise EpisodeError(f"scene {index}: {key} must be a finite number", field=f"scenes[{index - 1}].{key}")
             value = int(value)
         params[key] = value
     if typ == "python":
         if not isinstance(entry, str) or ":" not in entry:
             raise EpisodeError(f"scene {index}: python scenes need entry: file.py:function")
     elif typ == "image":
-        params = parse_image_params(raw, index, style)
+        params = parse_image_params(raw, index, style, timing_final=audio_mode != "voiceover" or overrun)
         if minimum is not None:
             rules = RULES[style]
             if not rules["shot_min"] <= minimum <= rules["shot_max"]:
@@ -188,9 +191,6 @@ def _scene(raw, index: int, audio_mode: str = "voiceover", style: str = HOUSE, v
     ident = raw.get("id")
     if ident is not None and not isinstance(ident, str):
         raise EpisodeError(f"scene {index}: id must be a string")
-    overrun = raw.get("vo_overrun", vo_overrun)
-    if not isinstance(overrun, bool):
-        raise EpisodeError(f"scene {index}: vo_overrun must be true or false")
     return Scene(typ, caption, keys, vo, minimum, params, entry if isinstance(entry, str) else None, green, ident, overrun)
 
 
@@ -218,8 +218,8 @@ def load_episode(path: str | Path) -> Episode:
     if not isinstance(voice, str) or (audio_mode == "voiceover" and not voice.strip()):
         raise EpisodeError("set voice (for example id-ID-ArdiNeural) or a known language (en-US, id-ID)")
     rate = str(data.get("rate") or "-8%")
-    if not _RATE.match(rate):
-        raise EpisodeError(f"rate must look like -8% or +0Hz, got {rate!r}")
+    if not _RATE.fullmatch(rate):
+        raise EpisodeError(f"rate must be a signed percentage such as -8% or +0%, got {rate!r}", field="rate")
     name = str(data.get("name") or source.stem)
     if not _NAME.match(name):
         raise EpisodeError("name must be letters, numbers, hyphens, and underscores")

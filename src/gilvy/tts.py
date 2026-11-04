@@ -113,6 +113,11 @@ class EdgeTTS:
 
     def synthesize(self, text: str, voice: str, rate: str, dest: Path, scene_min: float) -> Path:
         import edge_tts
+        import aiohttp
+        from gilvy.episode import _RATE
+
+        if not isinstance(rate, str) or not _RATE.fullmatch(rate):
+            raise GilvyError("rate must be a signed percentage", code="invalid_input", field="rate")
 
         dest.parent.mkdir(parents=True, exist_ok=True)
         last: Exception | None = None
@@ -126,7 +131,9 @@ class EdgeTTS:
                     await comm.save(str(dest))
 
                 asyncio.run(_save())
-            except Exception as exc:  # network and service errors are retried
+            except (ValueError, TypeError) as exc:
+                raise GilvyError(f"invalid edge-tts parameters: {exc}", code="invalid_input") from exc
+            except (aiohttp.ClientError, asyncio.TimeoutError, edge_tts.exceptions.NoAudioReceived) as exc:
                 last = exc
                 time.sleep(3)
                 continue

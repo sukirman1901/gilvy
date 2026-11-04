@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from gilvy.errors import GilvyError
 from gilvy.product import finite, load_product
 from gilvy.render_jobs import RenderControl
+from gilvy.publication import publication_lock
 
 
 def preview_product(spec_path, output_dir, times=None):
@@ -55,6 +56,15 @@ def preview_product(spec_path, output_dir, times=None):
 
 
 def render_product(spec_path, output, start=0.0, duration=None, *, control=None):
+    dest = Path(output).expanduser().resolve()
+    if dest.suffix.lower() != ".mp4":
+        raise GilvyError("product output must end in .mp4")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with publication_lock(dest):
+        return _render_product_locked(spec_path, dest, start, duration, control=control)
+
+
+def _render_product_locked(spec_path, output, start=0.0, duration=None, *, control=None):
     control = control or RenderControl()
     control.update("preparing")
     film = load_product(spec_path)
@@ -75,8 +85,7 @@ def render_product(spec_path, output, start=0.0, duration=None, *, control=None)
     dest = Path(output).expanduser().resolve()
     if dest.suffix.lower() != ".mp4":
         raise GilvyError("product output must end in .mp4")
-    if dest == Path(spec_path).expanduser().resolve() or audio == dest:
-        raise GilvyError("output must not replace an input")
+    _check_publication_inputs(film, spec_path, audio, (dest, dest.with_suffix(".product.json")))
     dest.parent.mkdir(parents=True, exist_ok=True)
     frames = max(1, math.ceil(duration * film.fps - 1e-8))
     actual = frames / film.fps
@@ -229,3 +238,26 @@ def render_product(spec_path, output, start=0.0, duration=None, *, control=None)
         # report that the video render failed or could still be cancelled.
         result["metadata_warning"] = str(exc)
     return result
+
+
+def _check_publication_inputs(film, spec_path, audio, destinations):
+    """Protect every published file from aliasing a declared input, including links."""
+    inputs = {Path(spec_path).expanduser().resolve()}
+    if audio is not None:
+        inputs.add(audio.resolve())
+
+    def collect(nodes):
+        for node in nodes:
+            if node.get("type") == "image":
+                inputs.add((film.source_dir / node["src"]).resolve())
+            if node.get("font"):
+                inputs.add((film.source_dir / node["font"]).resolve())
+            if node.get("type") == "group":
+                collect(node["children"])
+
+    collect(film.spec["layers"])
+    for destination in destinations:
+        destination = destination.resolve()
+        for source in inputs:
+            if destination == source or (destination.exists() and source.exists() and destination.samefile(source)):
+                raise GilvyError(f"publication output must not replace an input: {source}")

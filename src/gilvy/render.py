@@ -8,6 +8,9 @@ import multiprocessing
 import subprocess
 import sys
 import wave
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -20,8 +23,9 @@ from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
-from gilvy.image_scene import camera_metrics, match_warp, render_image_frame, zoom_through
+from gilvy.image_scene import camera_metrics, match_warp, overlay_event, overlay_start, render_image_frame, zoom_through
 from gilvy.presets import PHOTO_PRESETS, RULES
+from gilvy.publication import publication_lock as _publication_lock
 from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
@@ -159,7 +163,12 @@ class RenderState:
 
 
 def build_state(episode: Episode, durations: list[float], impls: list | None = None) -> RenderState:
+    _validate_event_ids(episode)
     durs = [float(d) for d in durations]
+    from gilvy.image_scene import _metrics_or_raise
+    for index, (scene, duration) in enumerate(zip(episode.scenes, durs), 1):
+        if scene.type == "image" and scene.params.get("composition") != "collage":
+            _metrics_or_raise(scene.params["camera"], index, episode.style, duration)
     starts = np.cumsum([0.0] + durs)
     if impls is None:
         impls = [scene.impl for scene in episode.scenes]
@@ -189,6 +198,7 @@ def scene_durations(episode: Episode, voiced: list[float]) -> list[float]:
 
 
 def preflight(episode: Episode) -> None:
+    _validate_event_ids(episode)
     require_assets(episode)
     ctx = Ctx(theme_for(episode))
     check_captions(ctx, [scene_payload(scene, episode) for scene in episode.scenes])
@@ -444,14 +454,35 @@ def _render_bed(source: Path, total: float, dest: Path, loop: bool, loudness: fl
         raise GilvyError(f"ffmpeg bed failed:\n{run.stderr[-2000:]}")
 
 
+def _validate_event_ids(episode: Episode) -> None:
+    from gilvy.errors import EpisodeError
+    identities = {}
+    for i, scene in enumerate(episode.scenes):
+        for j, overlay in enumerate(scene.params.get("overlays") or []):
+            identity = overlay.get("event_id")
+            if identity is None:
+                continue
+            signature = (overlay.get("at"), overlay.get("sfx"))
+            if identity in identities and identities[identity] != signature:
+                raise EpisodeError(f"conflicting event_id {identity!r}: shared sounds must have the same at and sfx",
+                                   field=f"scenes[{i}].overlays[{j}].event_id")
+            identities[identity] = signature
+
+
 def _sfx_cues(episode: Episode, state: RenderState) -> list[tuple[float, str]]:
     cues = []
+    emitted = set()
     for index, scene in enumerate(episode.scenes):
         params = scene.params or {}
         for overlay in params.get("overlays") or []:
             if overlay.get("sfx"):
-                at = float(overlay.get("at") or 0)
-                cues.append((float(state.starts[index]) + at, str(overlay["sfx"])))
+                event = overlay_event(overlay, scene.vo, state.durations[index], episode.style, float(state.starts[index]))
+                identity = event["event_id"]
+                if identity is not None:
+                    if identity in emitted:
+                        continue
+                    emitted.add(identity)
+                cues.append((event["episode_at"], str(event["sfx"])))
     return cues
 
 
@@ -572,12 +603,16 @@ def write_camera_metrics(episode: Episode, state: RenderState, dest: Path) -> No
             "ease": cam.get("ease"),
             "duration": round(dur, 4),
             "authored": {
-                "scale_start": cam["from"]["scale"],
-                "scale_end": cam["to"]["scale"],
+                "scale_start": s0,
+                "scale_end": s1,
                 "zoom_pct_per_s": authored["zoom_pct_per_s"],
-                "pan_start": {"x": cam["from"]["x"], "y": cam["from"]["y"]},
-                "pan_end": {"x": cam["to"]["x"], "y": cam["to"]["y"]},
+                "pan_start": {"x": x0, "y": y0},
+                "pan_end": {"x": x1, "y": y1},
                 "pan_px_per_s": authored["pan_px_per_s"],
+                "travel": authored["travel"],
+                "peak_zoom_pct_per_s": authored["peak_zoom_pct_per_s"],
+                "peak_pan_px_per_s": authored["peak_pan_px_per_s"],
+                "peak_method": authored["peak_method"],
             },
             "effective": {
                 "scale_start": round(float(s0), 4),
@@ -625,6 +660,10 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "key": scene.key,
                 "vo": scene.vo,
                 "vo_overrun": scene.vo_overrun,
+                "overlay_events": [
+                    {"index": j, **overlay_event(o, scene.vo, float(state.durations[i]), episode.style, float(state.starts[i]))}
+                    for j, o in enumerate(scene.params.get("overlays") or [])
+                ],
                 **_vo_extent(episode, i, scene, state),
                 **(
                     {"composition": scene.params.get("composition", "plate"),
@@ -699,31 +738,110 @@ def output_paths(base: Path, formats: list[str]) -> list[Path]:
     return [base.with_name(f"{base.stem}-{name}{base.suffix}") for name in formats]
 
 
-def render_episode(episode: Episode, output: Path, tts_name: str, workers: int) -> dict:
+def _publish_files(files: list[tuple[Path | None, Path]], build: Path) -> None:
+    """Stage backups before replacing anything; roll back ordinary publication failures.
+
+    The MP4 is replaced last. Multiple directory entries cannot be crash-atomic;
+    readers requiring a snapshot should hold the same destination lock.
+    """
+    backups = {}
+    for i, (_, dest) in enumerate(files):
+        backup = build / f"backup-{i}"
+        if dest.exists():
+            shutil.copy2(dest, backup)
+            backups[dest] = backup
+        else:
+            backups[dest] = None
+    replaced = []
+    try:
+        for source, dest in files:
+            if source is None:
+                dest.unlink(missing_ok=True)
+            else:
+                os.replace(source, dest)
+            replaced.append(dest)
+    except BaseException:
+        for dest in reversed(replaced):
+            backup = backups[dest]
+            if backup is None:
+                dest.unlink(missing_ok=True)
+            else:
+                os.replace(backup, dest)
+        raise
+    finally:
+        for backup in backups.values():
+            if backup is not None:
+                backup.unlink(missing_ok=True)
+
+
+def render_episode(episode: Episode, output: Path, tts_name: str, workers: int, *, control=None) -> dict:
+    from gilvy.render_jobs import RenderControl
+    control = control or RenderControl()
     require_ffmpeg()
     preflight(episode)
-    build = output.parent / output.stem
-    build.mkdir(parents=True, exist_ok=True)
+    output = Path(output).expanduser().resolve()
+    from gilvy.assets import collect_dependencies
+    destinations = {output, output.with_name(output.stem + "_poster.png"),
+                    *(output.with_suffix(suffix) for suffix in (".timeline.json", ".camera.json", ".product.json", ".preview.json"))}
+    inputs = {Path(d["path"]).resolve() for d in collect_dependencies(episode)}
+    if any(path.resolve() in inputs for path in destinations):
+        raise GilvyError("publication output or sidecar must not replace or delete an input")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with _publication_lock(output):
+        build = Path(tempfile.mkdtemp(prefix=f".{output.stem}-", dir=output.parent))
+        try:
+            return _render_candidate(episode, output, tts_name, workers, build, control)
+        except BaseException:
+            shutil.rmtree(build, ignore_errors=True)
+            raise
+
+
+def _render_candidate(episode, output, tts_name, workers, build, control):
+    control.check()
     voices, durations = prepare_timing(episode, build, tts_name)
     state = build_state(episode, durations)
-    video = build / "vid.mp4"
+    intermediate = build / "intermediate"
+    intermediate.mkdir()
+    candidate_dir = build / "candidate"
+    candidate_dir.mkdir()
+    video = intermediate / "vid.mp4"
     _encode(state, video, workers or default_workers())
     audio = prepare_audio(episode, state, build, voices)
-    _mux(video, audio, state.total, output)
+    candidate = candidate_dir / output.name
+    _mux(video, audio, state.total, candidate)
+    control.check()
     sheet = build / "sheet.png"
-    _sheet_from_video(output, state.starts, durations, sheet)
+    _sheet_from_video(candidate, state.starts, durations, sheet)
     poster = None
     if episode.poster is not None:
-        poster_path = output.with_name(output.stem + "_poster.png")
-        _poster(output, state.starts, durations, episode.poster, poster_path)
+        poster_path = build / (output.stem + "_poster.png")
+        _poster(candidate, state.starts, durations, episode.poster, poster_path)
         poster = str(poster_path)
-    timeline = output.with_suffix(".timeline.json")
+    timeline = candidate.with_suffix(".timeline.json")
     write_timeline(episode, state, timeline, tts_name)
-    camera_path = output.with_name(output.stem + ".camera.json")
+    camera_path = candidate.with_suffix(".camera.json")
     write_camera_metrics(episode, state, camera_path)
-    report = qc_video(output, str(timeline))
+    report = qc_video(candidate, str(timeline))
+    control.check()
+    published = bool(report.ok)
+    if published:
+        files = [(timeline, output.with_suffix(".timeline.json")),
+                 (camera_path, output.with_suffix(".camera.json"))]
+        if poster is not None:
+            files.append((Path(poster), output.with_name(output.stem + "_poster.png")))
+        else:
+            files.append((None, output.with_name(output.stem + "_poster.png")))
+        files.extend((None, output.with_suffix(suffix)) for suffix in (".product.json", ".preview.json"))
+        files.append((candidate, output))
+        control.publish(lambda: _publish_files(files, build))
+        timeline, camera_path = files[0][1], files[1][1]
+        poster = str(files[2][1]) if poster is not None else None
+        candidate = output
+        report.video = str(output)
     return {
-        "video": str(output),
+        "video": str(candidate),
+        "requested_output": str(output),
+        "published": published,
         "timeline": str(timeline),
         "camera": str(camera_path),
         "sheet": str(sheet),

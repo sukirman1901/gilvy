@@ -7,17 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from gilvy.assets import build_manifest, extract_style_refs, shot_spans
-from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
-from gilvy.formats import get_profile
-from gilvy.qc import qc_video
-from gilvy.render import output_paths, preview_episode, render_episode, preview_motion
-from gilvy.review import compare_versions
-from gilvy.reference import analyze_reference
-from gilvy.reference_download import download_reference
-from gilvy.product_render import render_product, preview_product
-from gilvy.elements import element_catalog, motion_reference_notes
 
 _TEMPLATE = """\
 # 9:16 faceless explainer. Voice-over first, then captions, then a scene type.
@@ -97,6 +87,8 @@ def _cmd_new(name: str) -> int:
 
 
 def _formats(episode, requested: list[str] | None) -> list[str]:
+    from gilvy.formats import get_profile
+
     names = requested or [episode.format]
     try:
         for name in names:
@@ -107,6 +99,9 @@ def _formats(episode, requested: list[str] | None) -> list[str]:
 
 
 def _cmd_preview(args: argparse.Namespace) -> int:
+    from gilvy.episode import load_episode
+    from gilvy.render import preview_episode
+
     episode = load_episode(args.episode)
     names = _formats(episode, args.format)
     if len(names) != 1:
@@ -122,6 +117,9 @@ def _cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_render(args: argparse.Namespace) -> int:
+    from gilvy.episode import load_episode, resolve_output
+    from gilvy.render import output_paths, render_episode
+
     episode = load_episode(args.episode)
     names = _formats(episode, args.format)
     base = resolve_output(episode, args.out)
@@ -142,6 +140,8 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_qc(args: argparse.Namespace) -> int:
+    from gilvy.qc import qc_video
+
     report = qc_video(args.video, args.timeline, args.audio_mode)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
@@ -153,6 +153,8 @@ def _cmd_qc(args: argparse.Namespace) -> int:
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="gilvy", description="Faceless 9:16 explainer videos.")
     sub = parser.add_subparsers(dest="command", required=True)
+    doctor = sub.add_parser("doctor", help="read-only installation diagnostics (JSON)")
+    doctor.add_argument("--json", action="store_true", help="JSON output (the default)")
 
     render = sub.add_parser("render", help="render an episode to mp4")
     render.add_argument("episode")
@@ -249,7 +251,14 @@ def run(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "doctor":
+            from gilvy.capabilities import capability_report
+
+            report = capability_report()
+            print(json.dumps(report, indent=2))
+            return 0 if report["ok"] else 1
         if args.command == "download-reference":
+            from gilvy.reference_download import download_reference
             print(json.dumps(download_reference(args.url,args.out,args.max_height,args.max_duration,
                                                 args.max_size_mb,args.timeout),indent=2))
             return 0
@@ -279,19 +288,24 @@ def run(argv: list[str] | None = None) -> int:
             print(product_notes())
             return 0
         if args.command == "render-product":
+            from gilvy.product_render import render_product
             print(json.dumps(render_product(args.spec,args.out,args.start,args.duration),indent=2))
             return 0
         if args.command == "preview-product":
+            from gilvy.product_render import preview_product
             print(json.dumps(preview_product(args.spec,args.out,args.times),indent=2))
             return 0
         if args.command == "analyze-reference":
+            from gilvy.reference import analyze_reference
             print(json.dumps(analyze_reference(args.video, args.out, args.threshold, args.min_scene,
                                               args.boundaries, args.clip_seconds, args.width), indent=2))
             return 0
         if args.command == "elements":
+            from gilvy.elements import element_catalog
             print(json.dumps(element_catalog(), indent=2))
             return 0
         if args.command == "motion-reference":
+            from gilvy.elements import motion_reference_notes
             print(motion_reference_notes())
             return 0
         if args.command == "reference-styles":
@@ -309,6 +323,8 @@ def run(argv: list[str] | None = None) -> int:
             print(json.dumps({"foreground": str(dest / "fg.png"), "background": str(dest / "bg.png")}, indent=2))
             return 0
         if args.command == "assets":
+            from gilvy.assets import build_manifest, extract_style_refs, shot_spans
+            from gilvy.episode import load_episode
             episode = load_episode(args.episode)
             refs = None
             if args.reference:
@@ -329,12 +345,15 @@ def run(argv: list[str] | None = None) -> int:
         if args.command == "qc":
             return _cmd_qc(args)
         if args.command == "preview-motion":
+            from gilvy.episode import load_episode
+            from gilvy.render import preview_motion
             episode = load_episode(args.episode)
             out = Path(args.out).expanduser().resolve() if args.out else Path.cwd() / "out" / f"{episode.name}-motion.mp4"
             print(json.dumps(preview_motion(episode, out, args.start, args.duration,
                                            args.tts, args.workers, args.width), indent=2))
             return 0
         if args.command == "compare":
+            from gilvy.review import compare_versions
             print(json.dumps(compare_versions(args.reference, args.candidate, args.out,
                                               args.reference_start, args.candidate_start,
                                               args.duration, args.sample_fps), indent=2))
