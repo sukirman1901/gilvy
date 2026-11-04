@@ -122,3 +122,5 @@ failure partial media can remain for diagnosis, but no completed manifest is
 written. No vision model, OCR, object tracker, beat detector or easing estimator
 runs. `creative_review: required` is an explicit unresolved review step, not an
 automatic approval.
+
+See [motion reference studies](motion-reference-studies.md) for worked examples. For YouTube, Gilvy also enables a Node runtime found on PATH. The optional download extra supplies the EJS dependency.

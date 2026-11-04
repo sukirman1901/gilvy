@@ -127,6 +127,11 @@ def download_reference(url: str, output_dir: str | Path, max_height: int = 1080,
     common = [sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-playlist',
               '--no-warnings', '--quiet', '--socket-timeout', '15', '--retries', '1',
               '--fragment-retries', '1', '--extractor-retries', '1', '--no-cache-dir', '--playlist-end', '1']
+    # yt-dlp enables Deno by default. Also allow a local Node runtime for YouTube.
+    if parts.hostname in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'):
+        node = shutil.which('node')
+        if node:
+            common.extend(['--js-runtimes', f'node:{node}'])
     try:
         metadata = json.loads(_run(common + ['--dump-single-json', '--skip-download',
                     '--flat-playlist', '--', url], deadline))

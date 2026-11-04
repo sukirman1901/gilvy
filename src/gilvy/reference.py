@@ -218,7 +218,7 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
     if scene_boundaries is None:
         metadata = _run(["ffmpeg", "-v", "error", "-nostdin", "-i", str(source), "-an", "-vf",
                          f"scale=160:-2,select=gte(scene\\,{threshold}),metadata=print:file=-",
-                         "-f", "null", "-"])
+                         "-c:v", "rawvideo", "-f", "null", "-"])
         candidates = _cuts(metadata, duration, threshold, min_scene)
         interior = [row["time"] for row in candidates if row["accepted"]]
         method = "automatic_cut_candidates"
