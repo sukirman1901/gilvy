@@ -44,19 +44,24 @@ def detect_shot(video: str | Path) -> dict:
     frames, fps, audio = _load(Path(video))
     if len(frames) < 4 or fps <= 0:
         return {"fps": fps, "tracks": [], "events": []}
-    scale = _scale_curve(frames)
+    times, scale = _scale_curve(frames, fps)
     ease = fit_ease(scale)
-    duration = (len(frames) - 1) / fps
+    # The encoder's last frame is one tick before the shot length (n/fps).
+    # A back-loaded ease still has zoom left in that tick. Project the fitted
+    # curve to the shot length instead of multiplying per-frame guesses, which
+    # ran high while expoOut was steep and reported 29.5 for an authored 25.
+    duration = len(frames) / fps if fps else 0.0
+    end_scale = _project_end(scale, times, duration, (ease or {}).get("ease"))
     tracks = [{
         "property": "scale",
         "keys": [
             {"t": 0.0, "v": round(float(scale[0]), 4), "ease": (ease or {}).get("ease", "linear")},
-            {"t": round(duration, 4), "v": round(float(scale[-1]), 4), "ease": "linear"},
+            {"t": round(duration, 4), "v": round(float(end_scale), 4), "ease": "linear"},
         ],
     }]
     zoom = 0.0
-    if scale[0] > 0 and scale[-1] > 0 and duration > 0:
-        zoom = float(np.log(scale[-1] / scale[0]) / duration * 100)
+    if scale[0] > 0 and end_scale > 0 and duration > 0:
+        zoom = float(np.log(end_scale / scale[0]) / duration * 100)
     events = []
     if ease:
         events.append({"effect": "zoom", "zoom_pct_per_s": round(zoom, 3), **ease})
@@ -137,26 +142,79 @@ def _load(path: Path):
     return frames, fps, audio
 
 
-def _scale_curve(frames: np.ndarray) -> np.ndarray:
-    """Cumulative scale, 1 at the first frame. Pairs use a short SSD search."""
+def _project_end(scale: np.ndarray, times: np.ndarray, duration: float, ease: str | None) -> float:
+    """Scale at the shot length, one tick past the last encoded frame."""
+    s0, s_last = float(scale[0]), float(scale[-1])
+    t_last = float(times[-1])
+    if not ease or duration <= 0 or t_last >= duration - 1e-4:
+        return s_last
+    covered = apply_ease(ease, t_last / duration)
+    if covered < 0.2:
+        return s_last
+    return s0 + (s_last - s0) / covered
+
+
+def _scale_curve(frames: np.ndarray, fps: float) -> tuple[np.ndarray, np.ndarray]:
+    """Scale of each sample against the first frame.
+
+    A running product of per-frame ratios compounds the search step. Matching
+    the first frame once does not.
+    """
     gray = frames.mean(axis=3)
-    scale = np.ones(len(frames), np.float64)
-    for i in range(1, len(frames)):
-        ratio = _pair_scale(gray[i - 1], gray[i])
-        scale[i] = scale[i - 1] * ratio
-    return scale
+    n = len(gray)
+    step = max(1, n // 12)
+    indexes = list(range(0, n, step))
+    if indexes[-1] != n - 1:
+        indexes.append(n - 1)
+    scales = [1.0]
+    times = [0.0]
+    for index in indexes[1:]:
+        scales.append(_match_scale(gray[0], gray[index]))
+        times.append(index / fps)
+    return np.asarray(times, float), np.asarray(scales, float)
 
 
-def _pair_scale(a: np.ndarray, b: np.ndarray) -> float:
-    best_s, best = 1.0, 1e18
-    h, w = a.shape
-    crop = (slice(h // 5, h - h // 5), slice(w // 5, w - w // 5))
-    for scale in np.linspace(0.88, 1.14, 27):
-        warped = _resize_center(a, float(scale))
-        err = float(np.mean((warped[crop] - b[crop]) ** 2))
-        if err < best:
-            best, best_s = err, float(scale)
-    return best_s
+def _match_scale(earlier: np.ndarray, later: np.ndarray) -> float:
+    """Scale of `later` relative to `earlier`. Greater than 1 is a push-in.
+
+    A pull reveals pixels the first frame never had, so magnifying the first
+    frame cannot reconstruct it. Try both directions and keep the better fit.
+    """
+    push, push_err = _fit_magnify(earlier, later)
+    pull, pull_err = _fit_magnify(later, earlier)
+    if pull_err < push_err:
+        return 1.0 / pull
+    return push
+
+
+def _fit_magnify(source: np.ndarray, target: np.ndarray) -> tuple[float, float]:
+    """Best factor >= 1 that magnifies `source` onto `target`, and its error."""
+    height, width = source.shape
+    crop = (slice(height // 6, -height // 6 or None), slice(width // 6, -width // 6 or None))
+
+    def error(scale: float) -> float:
+        warped = _resize_center(source, scale)
+        delta = warped[crop] - target[crop]
+        return float(np.mean(delta * delta))
+
+    best_s, best_e = 1.0, error(1.0)
+    for scale in np.linspace(1.0, 1.55, 23):
+        err = error(float(scale))
+        if err < best_e:
+            best_e, best_s = err, float(scale)
+    center = best_s
+    for scale in np.linspace(max(1.0, center - 0.02), center + 0.02, 13):
+        err = error(float(scale))
+        if err < best_e:
+            best_e, best_s = err, float(scale)
+    samples = np.linspace(max(1.0, best_s - 0.008), best_s + 0.008, 9)
+    errs = [error(float(scale)) for scale in samples]
+    quad = np.polyfit(samples, errs, 2)
+    if quad[0] > 1e-8:
+        vertex = float(-quad[1] / (2.0 * quad[0]))
+        if 1.0 <= vertex and abs(vertex - best_s) < 0.01:
+            return vertex, error(vertex)
+    return best_s, best_e
 
 
 def _resize_center(frame: np.ndarray, scale: float) -> np.ndarray:
