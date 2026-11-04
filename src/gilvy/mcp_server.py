@@ -357,21 +357,23 @@ def reference_styles() -> str:
 
 
 @mcp.tool()
-def asset_manifest(episode_path: str, reference: str = "", refs_out: str = "") -> str:
+def asset_manifest(episode_path: str, reference: str = "", refs_out: str = "",
+                    frames: int = 4, per_shot: bool = False) -> str:
     """List image plates an episode must generate before render, with style prompts.
 
-    Pass a local reference video to extract style frames, size each plate with
-    overscan for its pan and zoom, and compare an existing plate's colour,
-    contrast, and brightness. A miss includes a regen hint. This does not
-    generate images and does not copy reference frames into the episode.
+    Pass a local reference video to extract style frames. frames sets how many
+    (1..32). per_shot grabs the midpoint of each image scene and QCs that plate
+    against its own frame. A miss includes a regen hint. This does not generate
+    images and does not copy reference frames into the episode.
     """
-    from gilvy.assets import build_manifest, extract_style_refs
+    from gilvy.assets import build_manifest, extract_style_refs, shot_spans
     try:
         episode = load_episode(episode_path)
         refs = None
         if reference:
             dest = Path(refs_out).expanduser() if refs_out else episode.source_dir / "style-refs"
-            refs = extract_style_refs(reference, dest)
+            refs = extract_style_refs(reference, dest, count=frames,
+                                      shots=shot_spans(episode) if per_shot else None)
         return json.dumps({"ok": True, **build_manifest(episode, refs)})
     except GilvyError as exc:
         return _fail(exc)

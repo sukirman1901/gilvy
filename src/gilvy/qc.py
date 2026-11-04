@@ -20,18 +20,21 @@ from gilvy.presets import PHOTO_PRESETS, RULES, camera_problem
 
 
 def _vo_warnings(report: QCReport, meta: dict) -> None:
-    """A longer line used to stretch the shot and shove every later cut. Say so."""
-    if meta.get("vo_overrun"):
-        return
-    for scene in meta.get("scenes") or []:
-        if not scene.get("vo_extends_shot"):
-            continue
+    """A longer line used to stretch the shot, or to talk over the next line."""
+    scenes = meta.get("scenes") or []
+    for pos, scene in enumerate(scenes):
         label = f"scene {int(scene.get('index', 0)) + 1} ({scene.get('id') or scene.get('type')})"
-        report.warnings.append(
-            f"{label} voice is {float(scene.get('vo_seconds', 0)):.2f}s, longer than the "
-            f"{float(scene.get('shot_min', 0)):.2f}s shot, so later cuts move later. "
-            "Set vo_overrun: true to let the line play into the next shot."
-        )
+        if scene.get("vo_extends_shot") and not meta.get("vo_overrun") and not scene.get("vo_overrun"):
+            report.warnings.append(
+                f"{label} voice is {float(scene.get('vo_seconds', 0)):.2f}s, longer than the "
+                f"{float(scene.get('shot_min', 0)):.2f}s shot, so later cuts move later. "
+                "Set vo_overrun: true to let the line play into the next shot."
+            )
+        if scene.get("vo_overlaps_next"):
+            report.warnings.append(
+                f"{label} voice overruns by {float(scene.get('vo_overlap_s', 0)):.2f}s "
+                "and overlaps the next voice line."
+            )
 
 
 def checks_green(style: str | None) -> bool:

@@ -63,8 +63,8 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         seconds = 0.30 if kind == "zoom" else max(0.40, float(rules["default_transition_s"] or 0.40))
     else:
         seconds = float(raw["transition"])
-    if not math.isfinite(seconds) or not 0 <= seconds <= 1.2:
-        raise EpisodeError(f"scene {index}: transition must be seconds from 0 to 1.2")
+    if not math.isfinite(seconds) or not 0 <= seconds <= 2.0:
+        raise EpisodeError(f"scene {index}: transition must be seconds from 0 to 2.0")
     params["transition"] = seconds
     prompt = raw.get("prompt", "")
     if not isinstance(prompt, str):
@@ -135,10 +135,7 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
         scale = 1.0 + (cam[0] - 1.0) * gain
         ox = cam[1] * gain * theme.fit.scale
         oy = cam[2] * gain * theme.fit.scale
-        span = params["camera"]
-        margin_x = max(abs(span["from"]["x"]), abs(span["to"]["x"])) * gain * theme.fit.scale
-        margin_y = max(abs(span["from"]["y"]), abs(span["to"]["y"])) * gain * theme.fit.scale
-        _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy, margin_x, margin_y)
+        _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy)
     plate = _grade(plate, params["grade"])
     plate = _paper(plate, params["paper"], int(u * 30) + 3)
     plate = _grain(plate, params["grain"], u)
@@ -220,28 +217,30 @@ def _load(path: Path) -> Image.Image:
     return image
 
 
-def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: float,
-          margin_x: float = 0, margin_y: float = 0) -> None:
+def _blit(plate: np.ndarray, image: Image.Image, scale: float, ox: float, oy: float) -> None:
+    """Zoom by `scale` only. Pan shifts the window and never raises the zoom.
+
+    The previous blit used max(scale, pan margin), so a pan larger than the
+    zoom froze or shrank the scale and the shift was measured as almost nothing.
+    """
     ch, cw = plate.shape[:2]
     scale = max(1.0, float(scale))
     base = max(cw / max(1, image.width), ch / max(1, image.height))
-    # Reserve the shot's full pan even when this frame's zoom is 1. The reserve
-    # does not grow with the current offset, so the picture actually travels.
-    need_x = 1.0 + (2.0 * margin_x / cw if cw else 0.0)
-    need_y = 1.0 + (2.0 * margin_y / ch if ch else 0.0)
-    draw = base * max(scale, need_x, need_y)
-    sw = max(cw + 2, int(math.ceil(image.width * draw)))
-    sh = max(ch + 2, int(math.ceil(image.height * draw)))
-    resized = image.resize((sw, sh), Image.Resampling.BILINEAR)
+    draw = base * scale
+    sw = max(1, int(round(image.width * draw)))
+    sh = max(1, int(round(image.height * draw)))
+    resized = np.asarray(image.resize((sw, sh), Image.Resampling.BILINEAR))
     left = int(round((sw - cw) / 2 - ox))
     top = int(round((sh - ch) / 2 - oy))
-    left = min(max(0, left), max(0, sw - cw))
-    top = min(max(0, top), max(0, sh - ch))
-    crop = resized.crop((left, top, min(sw, left + cw), min(sh, top + ch)))
-    if crop.size != (cw, ch):
-        fitted = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-        fitted.paste(crop, (0, 0))
-        crop = fitted
+    pad_l = max(0, -left)
+    pad_t = max(0, -top)
+    pad_r = max(0, left + cw - sw)
+    pad_b = max(0, top + ch - sh)
+    if pad_l or pad_t or pad_r or pad_b:
+        resized = np.pad(resized, ((pad_t, pad_b), (pad_l, pad_r), (0, 0)), mode="edge")
+        left += pad_l
+        top += pad_t
+    crop = resized[top:top + ch, left:left + cw]
     src = np.asarray(crop, np.float32)
     alpha = src[:, :, 3:4] / 255.0
     plate[:] = plate * (1.0 - alpha) + src[:, :, :3] * alpha

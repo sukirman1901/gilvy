@@ -130,7 +130,7 @@ Author dissolves at **0.40 s** (**observed** order of magnitude 0.3–0.5 s; the
 
 The shot study calls the push **slow and linear**. Combined with the flat stretches in the zoom samples, plate ease defaults to **linear** (**inferred**). It is not proven for every beat.
 
-**Conformance:** push or pull **0.80–26 %/s**. A shot of **1.5 s or less** may punch up to **40 %/s**. Scale may reach **2.4**. Ease defaults to **exponential** so a measured constant %/s matches the authored rate; `ease: linear` is the old scale lerp, which reads about 0.7–0.85× that rate in the middle of a push. A pan of at least 8 px/s can carry a plate whose zoom is under 0.4 %/s. The blit keeps an extra margin so a pan at scale 1 is not clamped away. QC fails a static plate. There is no intro fade from black.
+**Conformance:** push or pull **0.80–26 %/s**. A shot of **1.5 s or less** may punch up to **40 %/s**. Scale may reach **2.4**. Ease defaults to **exponential** so a measured constant %/s matches the authored rate; `ease: linear` is the old scale lerp, which reads about 0.7–0.85× that rate in the middle of a push. A pan of at least 8 px/s can carry a plate whose zoom is under 0.4 %/s. Zoom does not grow to make room for that pan: the window shifts, and a plate that runs out of pixels repeats its edge. QC fails a static plate. There is no intro fade from black. A dissolve may last up to **2.0 s**.
 
 ### Grade, grain, type, circle
 
@@ -161,7 +161,9 @@ For these two styles, technical QC adds three checks on each `type: image` scene
 
 ## Assets
 
-`gilvy assets episode.yaml --reference video.mp4` writes four interior frames (style refs, not committed plates) and prints one fixed prompt template per style. history-story’s template is **archival photo, sepia, grain, vignette, framing**. Each plate’s pixel size is the 1080×1920 frame plus the camera’s pan margin, multiplied by the tightest zoom, so the move does not run out of picture. When the PNG already exists, the manifest compares its brightness, contrast, and colour to the reference frame in the nearest brightness bucket (not one average of every shot) and, on a miss, sets `image_qc.regen`.
+`gilvy assets episode.yaml --reference video.mp4` writes four interior frames (style refs, not committed plates) and prints one fixed prompt template per style. `--frames N` samples that many (1–32). `--per-shot` takes the midpoint of each image scene and compares that plate to its own frame. history-story’s template is **archival photo, sepia, grain, vignette, framing**. Each plate’s pixel size is the 1080×1920 frame plus the camera’s pan, multiplied by the tightest zoom, so the move does not run out of picture. When the PNG already exists, the manifest compares its brightness, contrast, and colour to the reference frame in the nearest brightness bucket (not one average of every shot) and, on a miss, sets `image_qc.regen`.
+
+Render writes `<video>.camera.json` beside the mp4: authored scale, zoom %/s, and pan next to the scale and pan the camera math actually applies. `vo_overrun` that runs a line into the next spoken line is a QC warning, not a failure.
 
 ## Gaps
 

@@ -453,17 +453,71 @@ def prepare_audio(episode: Episode, state: RenderState, build: Path, voices: lis
     return mix
 
 
-def _vo_extent(episode: Episode, index: int, scene: Scene) -> dict:
+def _vo_extent(episode: Episode, index: int, scene: Scene, state: RenderState | None = None) -> dict:
     spoken = (episode.spoken_seconds or [None] * len(episode.scenes))
     seconds = spoken[index] if index < len(spoken) else None
     if seconds is None or scene.min is None:
         return {}
-    extends = float(seconds) > float(scene.min) + 0.05 and not (episode.vo_overrun or scene.vo_overrun)
-    return {
+    overrun = episode.vo_overrun or scene.vo_overrun
+    extends = float(seconds) > float(scene.min) + 0.05 and not overrun
+    row = {
         "vo_seconds": round(float(seconds), 3),
         "shot_min": float(scene.min),
         "vo_extends_shot": extends,
     }
+    if state is not None and overrun and index + 1 < len(episode.scenes):
+        spill = float(seconds) - float(state.durations[index])
+        if spill > 0.05 and episode.scenes[index + 1].vo.strip():
+            row["vo_overlaps_next"] = True
+            row["vo_overlap_s"] = round(spill, 3)
+    return row
+
+
+def write_camera_metrics(episode: Episode, state: RenderState, dest: Path) -> None:
+    """Authored camera versus the scale and pan the renderer actually applies."""
+    import math
+
+    from gilvy.image_scene import _camera_at
+
+    rows = []
+    for i, scene in enumerate(episode.scenes):
+        if scene.type != "image":
+            continue
+        dur = float(state.durations[i])
+        cam = scene.params["camera"]
+        authored = camera_metrics(cam, dur)
+        s0, x0, y0 = _camera_at(cam, 0.0, dur)
+        s1, x1, y1 = _camera_at(cam, dur, dur)
+        if cam.get("ease") == "exponential" and s0 > 0 and s1 > 0 and s0 != s1:
+            zoom = math.log(s1 / s0) / dur * 100.0
+        else:
+            zoom = (s1 - s0) / dur * 100.0
+        rows.append({
+            "index": i,
+            "id": scene.id or f"s{i + 1}",
+            "ease": cam.get("ease"),
+            "duration": round(dur, 4),
+            "authored": {
+                "scale_start": cam["from"]["scale"],
+                "scale_end": cam["to"]["scale"],
+                "zoom_pct_per_s": authored["zoom_pct_per_s"],
+                "pan_start": {"x": cam["from"]["x"], "y": cam["from"]["y"]},
+                "pan_end": {"x": cam["to"]["x"], "y": cam["to"]["y"]},
+                "pan_px_per_s": authored["pan_px_per_s"],
+            },
+            "effective": {
+                "scale_start": round(float(s0), 4),
+                "scale_end": round(float(s1), 4),
+                "zoom_pct_per_s": round(zoom, 4),
+                "pan_start": {"x": round(float(x0), 3), "y": round(float(y0), 3)},
+                "pan_end": {"x": round(float(x1), 3), "y": round(float(y1), 3)},
+                "pan_px_per_s": {
+                    "x": round((float(x1) - float(x0)) / dur, 3),
+                    "y": round((float(y1) - float(y0)) / dur, 3),
+                },
+            },
+        })
+    dest.write_text(json.dumps({"name": episode.name, "style": episode.style, "scenes": rows}, indent=2) + "\n", encoding="utf-8")
 
 
 def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: str) -> None:
@@ -497,7 +551,7 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "key": scene.key,
                 "vo": scene.vo,
                 "vo_overrun": scene.vo_overrun,
-                **_vo_extent(episode, i, scene),
+                **_vo_extent(episode, i, scene, state),
                 **(
                     {"camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
                      "transition_out": scene.params.get("transition_out", "cut")}
@@ -590,10 +644,13 @@ def render_episode(episode: Episode, output: Path, tts_name: str, workers: int) 
         poster = str(poster_path)
     timeline = output.with_suffix(".timeline.json")
     write_timeline(episode, state, timeline, tts_name)
+    camera_path = output.with_name(output.stem + ".camera.json")
+    write_camera_metrics(episode, state, camera_path)
     report = qc_video(output, str(timeline))
     return {
         "video": str(output),
         "timeline": str(timeline),
+        "camera": str(camera_path),
         "sheet": str(sheet),
         "poster": poster,
         "duration": state.total,
