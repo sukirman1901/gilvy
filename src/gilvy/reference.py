@@ -84,7 +84,7 @@ def _gray_frames(source: Path, dimensions: tuple[int, int]) -> tuple[np.ndarray,
 
 
 def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -> list[dict]:
-    """Cross-dissolves: change spread across 0.25–2.0s that matches a linear blend.
+    """Cross-dissolves: change spread across 0.25–2.5s that matches a linear blend.
 
     A one-frame jump stays a hard cut. Thresholds were checked against the
     attached history short: joins near 9.0s and 14.6s match; the 5.68s join
@@ -112,9 +112,9 @@ def _soft_transitions(frames: np.ndarray, fps: float, hard_times: list[float]) -
             span = (ib - ia) / fps
             if span < 0.25:
                 continue
-            # Photo dissolves may run to 2.0s. The old 0.80s ceiling cut a 1.4s
+            # Photo dissolves may run to 2.5s. The old 0.80s ceiling cut a 1.4s
             # blend off before the 10%–90% clock (1.12s) could even be reported.
-            if span > 2.0:
+            if span > 2.5:
                 break
             t0, t1 = ia / fps, ib / fps
             if any(t0 + 0.06 < cut < t1 - 0.06 for cut in hard_times):
@@ -334,5 +334,16 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
                   "- Inferred: camera, easing, layer structure (state uncertainty).",
                   "- Reconstruction: carry, geometry, timing; compare a short proof before full render.", ""]
     report.write_text("\n".join(lines), encoding="utf-8")
+    manifest.write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
+    keyframes = dest / "keyframes.yaml"
+    try:
+        import yaml
+        from gilvy.measure import detect_shot, keyframe_document
+        document = keyframe_document(detect_shot(source), source.stem)
+        keyframes.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+        result["keyframes"] = str(keyframes)
+    except Exception as exc:
+        keyframes.write_text(f"# keyframe detect failed: {exc}\n", encoding="utf-8")
+        result["keyframes"] = str(keyframes)
     manifest.write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
     return result

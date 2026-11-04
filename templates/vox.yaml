@@ -1,0 +1,30 @@
+# Reusable vox-explainer template. Numbers are the pinned ref1 inventory
+# (tests/fixtures/effects_inventory.yaml), not a new measurement.
+name: vox
+style: vox-explainer
+effects:
+  - shake
+  - dissolve
+  - flash
+  - vignette
+camera:
+  ease: expoOut
+  # 140% punch is scale 2.4. Raise scale_max when a reference exceeds it.
+  scale_max: 2.4
+  tracks:
+    - property: scale
+      keys:
+        - {t: 0.0, v: 1.0, ease: expoIn}
+        - {t: 2.336, v: 0.926, ease: linear}
+    - property: x
+      keys:
+        - {t: 0.042, v: 0, ease: expoOut}
+        - {t: 0.709, v: 8, ease: linear}
+    - property: rotation
+      keys:
+        - {t: 3.545, v: 0, ease: linear}
+        - {t: 5.881, v: 1.11, ease: linear}
+transition:
+  kind: dissolve
+  seconds: 1.46
+  ease: easeInCubic

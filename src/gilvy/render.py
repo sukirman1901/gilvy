@@ -137,6 +137,8 @@ class RenderState:
             return image
         k = (u - (self.durations[index] - xf)) / xf
         k = 0.0 if k < 0 else 1.0 if k > 1 else k
+        from gilvy.keyframes import apply_ease
+        k = apply_ease(params.get("transition_ease") or "linear", k)
         nxt = self.picture(index + 1, u - self.durations[index])
         if kind == "zoom":
             return zoom_through(image, nxt, k)
@@ -432,7 +434,19 @@ def _render_bed(source: Path, total: float, dest: Path, loop: bool, loudness: fl
         raise GilvyError(f"ffmpeg bed failed:\n{run.stderr[-2000:]}")
 
 
+def _sfx_cues(episode: Episode, state: RenderState) -> list[tuple[float, str]]:
+    cues = []
+    for index, scene in enumerate(episode.scenes):
+        params = scene.params or {}
+        for overlay in params.get("overlays") or []:
+            if overlay.get("sfx"):
+                at = float(overlay.get("at") or 0)
+                cues.append((float(state.starts[index]) + at, str(overlay["sfx"])))
+    return cues
+
+
 def prepare_audio(episode: Episode, state: RenderState, build: Path, voices: list[Path]) -> Path | None:
+    cues = _sfx_cues(episode, state)
     if episode.audio_mode == "silent":
         return None
     loop = False
@@ -446,11 +460,61 @@ def prepare_audio(episode: Episode, state: RenderState, build: Path, voices: lis
         if loop or episode.loudness is not None:
             dest = build / "bed.wav"
             _render_bed(bed, state.total, dest, loop, episode.loudness)
-            return dest
-        return bed
+            bed = dest
+        return _with_sfx(bed, cues, build, state.total)
     mix = build / "mix.wav"
     _mix_audio(bed, voices, state.starts, state.theme.lead, state.total, mix, loop, episode.loudness)
-    return mix
+    return _with_sfx(mix, cues, build, state.total)
+
+
+def _with_sfx(bed: Path, cues: list[tuple[float, str]], build: Path, total: float) -> Path:
+    if not cues:
+        return bed
+    dest = build / "with-sfx.wav"
+    _mix_sfx(bed, cues, dest, total)
+    return dest
+
+
+def _write_silence(path: Path, total: float) -> None:
+    sr = SAMPLE_RATE
+    samples = np.zeros(int(sr * total), np.float32)
+    _write_wav(path, samples, sr)
+
+
+def _write_wav(path: Path, samples: np.ndarray, sr: int) -> None:
+    import wave
+
+    pcm = np.clip(samples, -1, 1)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sr)
+        handle.writeframes((pcm * 32767).astype(np.int16).tobytes())
+
+
+def _mix_sfx(bed: Path, cues: list[tuple[float, str]], dest: Path, total: float) -> None:
+    from gilvy.effects import SFX, write_sfx
+
+    inputs = ["-i", str(bed)]
+    graph = "[0:a]aformat=channel_layouts=mono,aresample=48000[bed];"
+    labels = ["[bed]"]
+    for i, (when, kind) in enumerate(cues):
+        cue = kind if kind in SFX else "click"
+        path = dest.parent / f"sfx-{i}.wav"
+        write_sfx(path, cue)
+        delay = max(0, int(when * 1000))
+        inputs += ["-i", str(path)]
+        graph += f"[{i + 1}:a]aformat=channel_layouts=mono,adelay={delay}|{delay}[s{i}];"
+        labels.append(f"[s{i}]")
+    graph += "".join(labels)
+    graph += f"amix=inputs={len(labels)}:normalize=0:duration=first[out]"
+    run = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", graph, "-map", "[out]",
+         "-t", f"{total:.3f}", str(dest)],
+        capture_output=True, text=True,
+    )
+    if run.returncode != 0:
+        raise GilvyError(f"ffmpeg sfx mix failed:\n{run.stderr[-2000:]}")
 
 
 def _vo_extent(episode: Episode, index: int, scene: Scene, state: RenderState | None = None) -> dict:

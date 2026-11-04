@@ -1,0 +1,20 @@
+# Pinned measurements from the 2026-11-04 effects inventory (ref1).
+# px are source 608x1080 units. These are the values templates are built from.
+ref1:
+  pan:
+    property: position.x
+    ease: expoOut
+    to_px: 8
+    rate_px_per_s: 12.4
+    ease_rmse: 0.218
+  zoom_out:
+    ease: expoIn
+    from_pct: 100
+    to_pct: 92.6
+    rate_pct_per_s: -3.17
+    ease_rmse: 0.198
+    linear_rmse: 0.503
+  rotation_deg: 1.11
+  dissolve_s: 1.46
+  shake_hz: 10
+  grain_hf_std: 17.33

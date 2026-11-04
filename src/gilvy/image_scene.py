@@ -13,17 +13,19 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from gilvy.easing import cl, eio, eo
+from gilvy.effects import apply_plate_effects, draw_mask, draw_strike, parse_effects, shake_offset, typewriter_count
 from gilvy.errors import EpisodeError, GilvyError
 from gilvy.formats import DESIGN_H, DESIGN_W
+from gilvy.keyframes import EASES, apply_ease, parse_tracks, sample_keys
 from gilvy.presets import HISTORY, PHOTO_PRESETS, RULES, VOX
 
 _CACHE: dict[tuple, Image.Image] = {}
 _FONTS: dict[tuple, ImageFont.FreeTypeFont] = {}
-_EASE = {"linear", "ease-out", "ease-in-out", "exponential"}
+_EASE = {"linear", "ease-out", "ease-in-out", "exponential", *EASES}
 _GRADES = {"none", "sepia", "paper"}
 _TRANSITIONS = {"cut", "dissolve", "zoom"}
-_OVERLAYS = {"text", "highlighter", "circle", "arrow"}
-_ENTRANCES = {"fade", "pop", "slide"}
+_OVERLAYS = {"text", "highlighter", "circle", "arrow", "strike", "mask", "stamp"}
+_ENTRANCES = {"fade", "pop", "slide", "typewriter"}
 _FONTS_NAMED = {"serif", "sans"}
 
 # Median of red text pixels on the attached ref3 frame at 5.0s. Antialiased,
@@ -63,27 +65,46 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         seconds = 0.30 if kind == "zoom" else max(0.40, float(rules["default_transition_s"] or 0.40))
     else:
         seconds = float(raw["transition"])
-    if not math.isfinite(seconds) or not 0 <= seconds <= 2.0:
-        raise EpisodeError(f"scene {index}: transition must be seconds from 0 to 2.0")
+    ease_name = raw.get("transition_ease") or "linear"
+    if ease_name not in EASES and ease_name != "linear":
+        raise EpisodeError(f"scene {index}: transition_ease must be a track ease")
+    # An eased dissolve may run to 2.5s (the reference joins past 2s). A plain
+    # linear one stays at 2.0 so older episodes keep the same bound.
+    limit = 2.5 if ease_name != "linear" else 2.0
+    if not math.isfinite(seconds) or not 0 <= seconds <= limit:
+        raise EpisodeError(f"scene {index}: transition must be seconds from 0 to {limit}")
     params["transition"] = seconds
+    params["transition_ease"] = ease_name
     prompt = raw.get("prompt", "")
     if not isinstance(prompt, str):
         raise EpisodeError(f"scene {index}: prompt must be a string")
     params["prompt"] = prompt.strip()
     params["text_fade_s"] = _fade_seconds(raw.get("text_fade_s", rules["text_fade_s"]), index)
     params["overlays"] = _overlays(raw.get("overlays") or [], index, rules, params["text_fade_s"])
+    params["effects"] = parse_effects(raw.get("effects"), index)
     _metrics_or_raise(params["camera"], index, style)
     return params
 
 
 def camera_metrics(camera: dict, duration: float) -> dict:
-    """Plate rates. Exponential zoom reports the constant relative %/s a measurement sees."""
+    """Plate rates. Exponential zoom reports the constant relative %/s a measurement sees.
+
+    Explicit tracks are sampled at the ends, so a multi-key move is the rate
+    from the first key to the last rather than only `from`/`to`.
+    """
     duration = max(float(duration), 1e-6)
-    start, end = camera["from"], camera["to"]
-    zoom = _zoom_percent(camera, duration)
-    pan_x = (end["x"] - start["x"]) / duration
-    pan_y = (end["y"] - start["y"]) / duration
-    moving = abs(zoom) >= 0.4 or math.hypot(pan_x, pan_y) >= 6.0
+    s0, x0, y0 = _camera_at(camera, 0.0, duration)
+    s1, x1, y1 = _camera_at(camera, duration, duration)
+    if camera.get("ease") == "exponential" and "scale" not in (camera.get("tracks") or {}) and s0 > 0 and s1 > 0 and s0 != s1:
+        zoom = math.log(s1 / s0) / duration * 100.0
+    else:
+        zoom = (s1 - s0) / duration * 100.0
+    pan_x = (x1 - x0) / duration
+    pan_y = (y1 - y0) / duration
+    spun = 0.0
+    if "rotation" in (camera.get("tracks") or {}):
+        spun = abs(sample_keys(camera["tracks"]["rotation"], duration, duration) - sample_keys(camera["tracks"]["rotation"], 0.0, duration))
+    moving = abs(zoom) >= 0.4 or math.hypot(pan_x, pan_y) >= 6.0 or spun >= 0.4
     return {
         "ease": camera["ease"],
         "duration": round(duration, 4),
@@ -129,16 +150,38 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
         return frame
     plate = np.zeros((ch, cw, 3), np.float32)
     plate[:] = np.array(theme.bg, np.float32)
-    cam = _camera_at(params["camera"], u, duration)
+    pose = camera_pose(params["camera"], u, duration)
+    shake = (0.0, 0.0)
+    for effect in params.get("effects") or []:
+        if effect["kind"] == "shake":
+            dx, dy = shake_offset(effect, u)
+            shake = (shake[0] + dx, shake[1] + dy)
     for layer in params["layers"]:
         gain = 0.25 + 0.75 * float(layer["depth"])
-        scale = 1.0 + (cam[0] - 1.0) * gain
-        ox = cam[1] * gain * theme.fit.scale
-        oy = cam[2] * gain * theme.fit.scale
+        tracks = layer.get("tracks") or {}
+        scale = 1.0 + (pose["scale"] - 1.0) * gain
+        if "scale" in tracks:
+            scale *= sample_keys(tracks["scale"], u, duration)
+        ox = pose["x"] * gain * theme.fit.scale + shake[0]
+        oy = pose["y"] * gain * theme.fit.scale + shake[1]
+        if "x" in tracks:
+            ox += sample_keys(tracks["x"], u, duration)
+        if "y" in tracks:
+            oy += sample_keys(tracks["y"], u, duration)
         _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy)
+    if abs(pose["rotation"]) > 0.05:
+        turned = Image.fromarray(np.clip(plate, 0, 255).astype(np.uint8)).rotate(
+            -pose["rotation"], resample=Image.Resampling.BICUBIC, expand=False,
+        )
+        plate = np.asarray(turned, np.float32)
+    if pose["opacity"] < 0.999:
+        plate *= pose["opacity"]
     plate = _grade(plate, params["grade"])
     plate = _paper(plate, params["paper"], int(u * 30) + 3)
     plate = _grain(plate, params["grain"], u)
+    prev = camera_pose(params["camera"], max(0.0, u - 1 / 60), duration)
+    velocity = ((pose["x"] - prev["x"]) * max(theme.fps, 1), (pose["y"] - prev["y"]) * max(theme.fps, 1))
+    plate = apply_plate_effects(plate, params.get("effects") or [], u, velocity)
     plate = _paint_overlays(
         plate, theme, params["overlays"], u, duration, scene.get("vo") or "", scene.get("style") or VOX
     )
@@ -177,18 +220,29 @@ def _content_box(theme) -> tuple[int, int, int, int]:
 def _camera_at(camera, u, duration):
     t = 0.0 if duration <= 0 else cl(u / duration)
     a, b = camera["from"], camera["to"]
-    if camera.get("ease") == "exponential" and a["scale"] > 0 and b["scale"] > 0:
+    tracks = camera.get("tracks") or {}
+    if "scale" in tracks:
+        scale = sample_keys(tracks["scale"], u, duration)
+        p = t
+    elif camera.get("ease") == "exponential" and a["scale"] > 0 and b["scale"] > 0:
         # Constant relative rate: scale(t) = s0 * (s1/s0)^t. Linear scale reads ~0.7–0.85× this.
         scale = a["scale"] * (b["scale"] / a["scale"]) ** t
         p = t
     else:
         p = _apply_ease(camera["ease"], t)
         scale = a["scale"] + (b["scale"] - a["scale"]) * p
-    return (
-        scale,
-        a["x"] + (b["x"] - a["x"]) * p,
-        a["y"] + (b["y"] - a["y"]) * p,
-    )
+    x = sample_keys(tracks["x"], u, duration) if "x" in tracks else a["x"] + (b["x"] - a["x"]) * p
+    y = sample_keys(tracks["y"], u, duration) if "y" in tracks else a["y"] + (b["y"] - a["y"]) * p
+    return scale, x, y
+
+
+def camera_pose(camera, u, duration) -> dict:
+    """Scale, pan, and the optional rotation/opacity tracks."""
+    scale, x, y = _camera_at(camera, u, duration)
+    tracks = camera.get("tracks") or {}
+    rotation = sample_keys(tracks["rotation"], u, duration) if "rotation" in tracks else 0.0
+    opacity = sample_keys(tracks["opacity"], u, duration) if "opacity" in tracks else 1.0
+    return {"scale": scale, "x": x, "y": y, "rotation": rotation, "opacity": opacity}
 
 
 def _apply_ease(name: str, p: float) -> float:
@@ -196,7 +250,9 @@ def _apply_ease(name: str, p: float) -> float:
         return eo(p)
     if name == "ease-in-out":
         return eio(p)
-    return cl(p)
+    if name in ("linear", "exponential"):
+        return cl(p)
+    return apply_ease(name, p)
 
 
 def _load(path: Path) -> Image.Image:
@@ -309,9 +365,20 @@ def _draw_overlay(pen, layer, item, u, start, theme, x0, y0):
     if kind == "text":
         _draw_text(layer, item, u, start, theme, x0, y0)
         return
-    duration = float(item["duration"])
+    duration = float(item.get("duration") or 0.4)
     progress = cl((u - start) / duration) if duration else 1.0
     color = item["color"]
+    if kind == "strike":
+        origin = _map(theme, item["x"], item["y"], x0, y0)
+        draw_strike(pen, (origin[0], origin[1], origin[0] + item["w"], origin[1] + item["h"]), progress, color)
+        return
+    if kind == "mask":
+        origin = _map(theme, item["x"], item["y"], x0, y0)
+        draw_mask(pen, origin, (item["w"] * theme.fit.scale, item["h"] * theme.fit.scale), progress)
+        return
+    if kind == "stamp":
+        _draw_stamp(layer, item, progress, theme, x0, y0)
+        return
     if kind == "highlighter":
         width = item["w"] * theme.fit.scale * progress
         origin = _map(theme, item["x"], item["y"], x0, y0)
@@ -332,7 +399,9 @@ def _draw_overlay(pen, layer, item, u, start, theme, x0, y0):
 def _draw_text(layer, item, u, start, theme, x0, y0):
     local = u - start
     hold = float(item["hold"])
-    if item["entrance"] == "fade":
+    if item["entrance"] == "typewriter":
+        appear = 1.0
+    elif item["entrance"] == "fade":
         fade_s = float(item.get("fade", 0.45))
         appear = 1.0 if fade_s <= 0 else cl(local / fade_s)
     elif item["entrance"] == "slide":
@@ -343,7 +412,12 @@ def _draw_text(layer, item, u, start, theme, x0, y0):
         appear *= 1.0 - cl((local - hold) / 0.25)
     if appear <= 0:
         return
-    lines = [word for word in item["text"].split(" ") if word] or [item["text"]]
+    words = [word for word in item["text"].split(" ") if word] or [item["text"]]
+    if item["entrance"] == "typewriter":
+        words = words[:typewriter_count(item["text"], local, float(item.get("word_seconds") or 0.2))]
+        if not words:
+            return
+    lines = words
     anchor = _map(theme, item["x"], item["y"], x0, y0)
     slide = 0.0
     if item["entrance"] == "slide":
@@ -399,6 +473,19 @@ def _stack_text(frame_size, lines, item, theme, anchor, slide, pop, alpha):
     left = min(max(margin, left), max(margin, width - margin - chip.width))
     top = min(max(margin, top), max(margin, height - margin - chip.height))
     return chip, left, top
+
+
+def _draw_stamp(layer, item, progress, theme, x0, y0):
+    """A stamp settles from a larger, tilted mark down to the authored size."""
+    pop = 1.35 - 0.35 * progress
+    angle = -8 * (1 - progress)
+    chip = Image.new("RGBA", (max(8, int(item["w"])), max(8, int(item["h"]))), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(chip)
+    pen.text((8, 8), item.get("text") or "STAMP", fill=(*item["color"], 255))
+    chip = chip.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+    chip = chip.resize((max(1, int(chip.width * pop)), max(1, int(chip.height * pop))), Image.Resampling.BILINEAR)
+    origin = _map(theme, item["x"], item["y"], x0, y0)
+    _stamp(layer, chip, int(origin[0]), int(origin[1]))
 
 
 def _stamp(base: Image.Image, chip: Image.Image, left: int, top: int) -> None:
@@ -466,7 +553,10 @@ def _layers(raw: dict, index: int) -> list[dict]:
         prompt = layer.get("prompt", "")
         if not isinstance(prompt, str):
             raise EpisodeError(f"scene {index}: layer prompt must be a string")
-        out.append({"src": layer["src"], "depth": depth, "prompt": prompt.strip()})
+        parsed = {"src": layer["src"], "depth": depth, "prompt": prompt.strip()}
+        if layer.get("tracks"):
+            parsed["tracks"] = parse_tracks(layer.get("tracks"), index, 4.0)
+        out.append(parsed)
     return out
 
 
@@ -476,12 +566,17 @@ def _camera(raw, index: int, rules: dict) -> dict:
         raise EpisodeError(f"scene {index}: camera must be a mapping")
     ease = raw.get("ease", rules["default_ease"])
     if ease not in _EASE:
-        raise EpisodeError(f"scene {index}: camera.ease must be linear, ease-out, ease-in-out, or exponential")
-    limit = float(rules.get("scale_max", 1.45))
+        raise EpisodeError(f"scene {index}: camera.ease must be linear, ease-out, ease-in-out, exponential, or a track ease")
+    preset = float(rules.get("scale_max", 2.4))
+    limit = float(raw.get("scale_max", preset))
+    if not math.isfinite(limit) or not preset <= limit <= 4.0:
+        raise EpisodeError(f"scene {index}: scale_max must be from {preset} to 4")
     return {
         "ease": ease,
+        "scale_max": limit,
         "from": _point(raw.get("from") or {}, index, "from", limit),
         "to": _point(raw.get("to") or {}, index, "to", limit),
+        "tracks": parse_tracks(raw.get("tracks"), index, limit),
     }
 
 
@@ -511,7 +606,9 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
     out = []
     for i, item in enumerate(raw):
         if not isinstance(item, dict) or item.get("kind") not in _OVERLAYS:
-            raise EpisodeError(f"scene {index}: overlay {i + 1} kind must be text, highlighter, circle, or arrow")
+            raise EpisodeError(
+                f"scene {index}: overlay {i + 1} kind must be text, highlighter, circle, arrow, strike, mask, or stamp"
+            )
         kind = item["kind"]
         parsed = {"kind": kind, "color": _color(item.get("color"), index, MEASURED_RED if kind != "highlighter" else (185, 168, 10))}
         if item.get("at") is not None:
@@ -528,13 +625,16 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
             entrance = item.get("entrance", rules["text_entrance"])
             font = item.get("font", "serif" if rules is RULES[HISTORY] else "sans")
             if entrance not in _ENTRANCES or font not in _FONTS_NAMED:
-                raise EpisodeError(f"scene {index}: text entrance must be fade, pop, or slide; font must be serif or sans")
+                raise EpisodeError(
+                    f"scene {index}: text entrance must be fade, pop, slide, or typewriter; font must be serif or sans"
+                )
             parsed.update(text=item["text"], entrance=entrance, font=font,
                           size=_num(item.get("size", rules["text_size"]), index, "size", 12, 480),
                           fade=_fade_seconds(item.get("text_fade_s", fade_s), index),
                           hold=_seconds(item.get("hold", 1.6), index, "hold"),
                           x=_num(item.get("x", DESIGN_W / 2), index, "x", -200, 1400),
-                          y=_num(item.get("y", 780), index, "y", -200, 2100))
+                          y=_num(item.get("y", 780), index, "y", -200, 2100),
+                          word_seconds=_num(item.get("word_seconds", 0.2), index, "word_seconds", 0.04, 2))
         elif kind == "highlighter":
             parsed.update(duration=_seconds(item.get("duration", 0.40), index, "duration"),
                           x=_num(item["x"], index, "x", -200, 1400),
@@ -547,13 +647,22 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
                           cy=_num(item.get("cy", item.get("y")), index, "cy", -200, 2100),
                           r=_num(item["r"], index, "r", 4, 800),
                           width=_num(item.get("width", 8), index, "width", 1, 40))
-        else:
+        elif kind == "arrow":
             points = item.get("points")
             if not isinstance(points, list) or len(points) < 2:
                 raise EpisodeError(f"scene {index}: arrow overlay needs at least two points")
             parsed["points"] = [(_num(p[0], index, "x", -200, 1400), _num(p[1], index, "y", -200, 2100)) for p in points]
             parsed["duration"] = _seconds(item.get("duration", 0.50), index, "duration")
             parsed["width"] = _num(item.get("width", 8), index, "width", 1, 40)
+        if kind in ("strike", "mask", "stamp"):
+            parsed.update(
+                duration=_seconds(item.get("duration", 0.4), index, "duration"),
+                x=_num(item.get("x", 80), index, "x", -200, 1400),
+                y=_num(item.get("y", 400), index, "y", -200, 2100),
+                w=_num(item.get("w", 400), index, "w", 4, 1200),
+                h=_num(item.get("h", 80), index, "h", 4, 800),
+                text=item.get("text") if isinstance(item.get("text"), str) else "STAMP",
+            )
         sfx = item.get("sfx")
         if sfx is not None:
             if not isinstance(sfx, str):

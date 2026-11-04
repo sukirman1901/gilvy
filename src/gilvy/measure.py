@@ -306,3 +306,6 @@ def _frac(left: float, mid: float, right: float) -> float:
     if abs(denom) < 1e-8:
         return 0.0
     return float(np.clip(0.5 * (left - right) / denom, -0.5, 0.5))
+
+
+from gilvy.detect import detect_shot, fit_ease, keyframe_document  # noqa: E402,F401
