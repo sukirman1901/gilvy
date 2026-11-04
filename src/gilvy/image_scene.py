@@ -10,7 +10,7 @@ import math
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from gilvy.easing import cl, eio, eo
 from gilvy.effects import apply_plate_effects, draw_mask, draw_strike, parse_effects, shake_offset, typewriter_count
@@ -23,7 +23,10 @@ _CACHE: dict[tuple, Image.Image] = {}
 _FONTS: dict[tuple, ImageFont.FreeTypeFont] = {}
 _EASE = {"linear", "ease-out", "ease-in-out", "exponential", *EASES}
 _GRADES = {"none", "sepia", "paper"}
-_TRANSITIONS = {"cut", "dissolve", "zoom"}
+_TRANSITIONS = {"cut", "dissolve", "zoom", "match"}
+# High-frequency std of unit gaussian noise after a 1.5px blur is removed.
+# grain_std asks for that measured std, so the noise amplitude is std / this gain.
+_GRAIN_HF_GAIN = 0.945
 _OVERLAYS = {"text", "highlighter", "circle", "arrow", "strike", "mask", "stamp"}
 _ENTRANCES = {"fade", "pop", "slide", "typewriter"}
 _FONTS_NAMED = {"serif", "sans"}
@@ -50,17 +53,22 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         raise EpisodeError(f"scene {index}: grade must be none, sepia, or paper")
     params["grade"] = grade
     params["grain"] = _unit(raw.get("grain", rules["default_grain"]), index, "grain")
+    params["grain_std"] = _grain_std(raw.get("grain_std"), index)
     params["paper"] = _unit(raw.get("paper", 0.12 if grade == "paper" else 0.0), index, "paper")
+    params["color_tracks"] = _color_tracks(raw.get("color"), index)
     show = raw.get("show_caption", False)
     if not isinstance(show, bool):
         raise EpisodeError(f"scene {index}: show_caption must be true or false")
     params["show_caption"] = show
     kind = raw.get("transition_out", rules["default_transition"])
     if kind not in _TRANSITIONS:
-        raise EpisodeError(f"scene {index}: transition_out must be cut, dissolve, or zoom")
+        raise EpisodeError(f"scene {index}: transition_out must be cut, dissolve, zoom, or match")
     params["transition_out"] = kind
+    params["match_tracks"] = _match_tracks(raw.get("match"), index) if kind == "match" else {}
     if kind == "cut":
         seconds = float(raw.get("transition") or 0)
+    elif kind == "match" and raw.get("transition") is None:
+        seconds = 0.40
     elif raw.get("transition") is None:
         seconds = 0.30 if kind == "zoom" else max(0.40, float(rules["default_transition_s"] or 0.40))
     else:
@@ -177,8 +185,9 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
     if pose["opacity"] < 0.999:
         plate *= pose["opacity"]
     plate = _grade(plate, params["grade"])
+    plate = _animate_color(plate, params.get("color_tracks") or {}, u, duration)
     plate = _paper(plate, params["paper"], int(u * 30) + 3)
-    plate = _grain(plate, params["grain"], u)
+    plate = _grain(plate, params["grain"], u, params.get("grain_std"))
     prev = camera_pose(params["camera"], max(0.0, u - 1 / 60), duration)
     velocity = ((pose["x"] - prev["x"]) * max(theme.fps, 1), (pose["y"] - prev["y"]) * max(theme.fps, 1))
     plate = apply_plate_effects(plate, params.get("effects") or [], u, velocity)
@@ -338,13 +347,86 @@ def _paper(plate: np.ndarray, amount: float, seed: int) -> np.ndarray:
     return plate * (1 - mix) + fiber[:, :, None] * mix
 
 
-def _grain(plate: np.ndarray, amount: float, u: float) -> np.ndarray:
-    if amount <= 0:
+def _grain(plate: np.ndarray, amount: float, u: float, grain_std: float | None = None) -> np.ndarray:
+    if grain_std is not None and grain_std > 0:
+        sigma = float(grain_std) / _GRAIN_HF_GAIN
+    elif amount <= 0:
         return plate
+    else:
+        sigma = amount * 18.0
     seed = (int(round(u * 480.0)) * 997 + 13) & 0xFFFFFFFF
     rng = np.random.default_rng(seed)
     noise = rng.standard_normal((plate.shape[0], plate.shape[1], 1)).astype(np.float32)
-    return np.clip(plate + noise * (amount * 18.0), 0, 255)
+    return np.clip(plate + noise * sigma, 0, 255)
+
+
+def high_frequency_std(plate: np.ndarray) -> float:
+    """Std of the picture minus a 1.5px blur. This is the inventory grain measure."""
+    gray = plate.mean(axis=2) if plate.ndim == 3 else np.asarray(plate, np.float32)
+    image = Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8))
+    blurred = np.asarray(image.filter(ImageFilter.GaussianBlur(radius=1.5)), np.float32)
+    return float((np.asarray(image, np.float32) - blurred).std())
+
+
+def _animate_color(plate: np.ndarray, tracks: dict, u: float, duration: float) -> np.ndarray:
+    """Hue, saturation, and brightness after the static plate grade.
+
+    The sepia or paper grade still runs first. These tracks are a second grade
+    that can move on its own keys.
+    """
+    if not tracks:
+        return plate
+    hue = sample_keys(tracks["hue"], u, duration) if "hue" in tracks else 0.0
+    sat = sample_keys(tracks["sat"], u, duration) if "sat" in tracks else 1.0
+    bright = sample_keys(tracks["bright"], u, duration) if "bright" in tracks else 1.0
+    if abs(hue) < 1e-3 and abs(sat - 1.0) < 1e-3 and abs(bright - 1.0) < 1e-3:
+        return plate
+    r, g, b = plate[:, :, 0], plate[:, :, 1], plate[:, :, 2]
+    luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    chroma = plate - luma[:, :, None]
+    if abs(hue) >= 1e-3:
+        chroma = _rotate_chroma(chroma, hue)
+    return np.clip(luma[:, :, None] * bright + chroma * sat, 0, 255)
+
+
+def _rotate_chroma(chroma: np.ndarray, degrees: float) -> np.ndarray:
+    """Rotate RGB around the gray axis. That is a hue change at constant luma."""
+    angle = math.radians(degrees)
+    c, s = math.cos(angle), math.sin(angle)
+    axis = 1.0 / math.sqrt(3.0)
+    # Rodrigues: c*I + s*[axis]_x + (1-c)*axis*axis^T
+    one_c = 1.0 - c
+    ax = axis
+    matrix = np.array([
+        [c + one_c * ax * ax, one_c * ax * ax - s * ax, one_c * ax * ax + s * ax],
+        [one_c * ax * ax + s * ax, c + one_c * ax * ax, one_c * ax * ax - s * ax],
+        [one_c * ax * ax - s * ax, one_c * ax * ax + s * ax, c + one_c * ax * ax],
+    ], np.float32)
+    flat = chroma.reshape(-1, 3)
+    return (flat @ matrix.T).reshape(chroma.shape)
+
+
+def match_warp(image: np.ndarray, scale: float, ox: float, oy: float, rotation: float) -> np.ndarray:
+    """Scale, shift, and rotate a finished frame about its centre.
+
+    A match cut uses this on the outgoing shot so a shape can land on the
+    incoming shot's position. The next frame is the incoming shot, unblended.
+    """
+    height, width = image.shape[:2]
+    picture = Image.fromarray(np.clip(image, 0, 255).astype(np.uint8))
+    scale = max(0.2, float(scale))
+    if abs(scale - 1.0) >= 1e-3:
+        picture = picture.resize(
+            (max(2, int(round(width * scale))), max(2, int(round(height * scale)))),
+            Image.Resampling.BILINEAR,
+        )
+    canvas = Image.new("RGB", (width, height))
+    left = int(round((width - picture.size[0]) / 2 + ox))
+    top = int(round((height - picture.size[1]) / 2 + oy))
+    canvas.paste(picture, (left, top))
+    if abs(rotation) > 0.05:
+        canvas = canvas.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=False)
+    return np.asarray(canvas, np.float32)
 
 
 def _paint_overlays(plate, theme, overlays, u, duration, vo, style):
@@ -698,6 +780,69 @@ def _metrics_or_raise(camera, index, style):
         raise EpisodeError(
             f"scene {index}: camera from and to are the same. {style} image plates have to push, pull, or pan."
         )
+
+
+def _grain_std(value, index: int) -> float | None:
+    if value is None:
+        return None
+    number = _num(value, index, "grain_std", 0, 80)
+    return number
+
+
+def _color_tracks(raw, index: int) -> dict:
+    """Hue, saturation, and brightness tracks. Independent of grade: none/sepia/paper."""
+    if raw is None:
+        return {}
+    tracks = raw.get("tracks") if isinstance(raw, dict) else None
+    if not isinstance(tracks, list):
+        raise EpisodeError(f"scene {index}: color.tracks must be a list")
+    bounds = {"hue": (-180.0, 180.0), "sat": (0.0, 3.0), "bright": (0.0, 3.0)}
+    out = {}
+    for item in tracks:
+        if not isinstance(item, dict):
+            raise EpisodeError(f"scene {index}: a color track must be a mapping")
+        prop = item.get("property")
+        if prop not in bounds:
+            raise EpisodeError(f"scene {index}: color property must be hue, sat, or bright")
+        keys = item.get("keys")
+        if not isinstance(keys, list) or len(keys) < 2:
+            raise EpisodeError(f"scene {index}: color track {prop} needs at least two keys")
+        lo, hi = bounds[prop]
+        built = []
+        for key in keys:
+            if not isinstance(key, dict):
+                raise EpisodeError(f"scene {index}: a color key must be a mapping")
+            try:
+                t, v = float(key["t"]), float(key["v"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise EpisodeError(f"scene {index}: a color key needs numeric t and v") from exc
+            if not math.isfinite(t) or not 0 <= t <= 30:
+                raise EpisodeError(f"scene {index}: color key t must be seconds from 0 to 30")
+            if not math.isfinite(v) or not lo <= v <= hi:
+                raise EpisodeError(f"scene {index}: {prop} key must be from {lo} to {hi}")
+            ease = key.get("ease") or "linear"
+            if ease not in EASES:
+                raise EpisodeError(f"scene {index}: color ease must be a track ease")
+            built.append({"t": t, "v": v, "ease": ease})
+        built.sort(key=lambda row: row["t"])
+        out[prop] = built
+    return out
+
+
+def _match_tracks(raw, index: int) -> dict:
+    """Scale, x, y, and rotation that align the outgoing frame onto the next shot."""
+    if raw is None:
+        raw = {}
+    tracks = raw.get("tracks") if isinstance(raw, dict) else None
+    if tracks is None:
+        raise EpisodeError(f"scene {index}: a match cut needs match.tracks")
+    parsed = parse_tracks(tracks, index, 4.0)
+    extra = set(parsed) - {"scale", "x", "y", "rotation"}
+    if extra:
+        raise EpisodeError(f"scene {index}: match tracks must be scale, x, y, or rotation")
+    if not parsed:
+        raise EpisodeError(f"scene {index}: a match cut needs match.tracks")
+    return parsed
 
 
 def _unit(value, index, name) -> float:

@@ -22,10 +22,11 @@ films; the library may still draw them.
 | Highlighter, circle, arrow, strike, mask | not classified | not classified | slow reveals | Ready. Sweeps take a named `ease`. Arrowhead and a freehand curve are not a separate tool. |
 | Stamp | not classified | not classified | not classified | Ready. |
 | SFX onsets | 34 | 28 | 28 | Partial. `overlays[].sfx` is mixed on cue. The inventory onsets are not all tied to a visual event. |
-| Grain / paper / sepia grade | measured hf std | measured hf std | lower hf std | Partial. `grain`, `paper`, and `grade` draw them. The amount is not calibrated to the measured hf std. |
+| Paper / sepia grade | measured | measured | measured | Ready as a per-shot grade. Colour animation is a separate track. |
 | Vignette, flicker, light leak, dust, glitch, wipe | not measured | not measured | not measured | Ready in the library, absent from the inventory. |
-| Match-cut semantics | — | — | — | Missing. A cut is a cut; “same shape on both sides” is not a transition type. |
-| Animated colour, separate from the plate | not measured | not measured | not measured | Missing. Grade is one choice per shot. |
+| Match cut | — | — | — | Ready. `transition_out: match` with `match.tracks` of scale, x, y, rotation. The outgoing frame aligns, then the next shot cuts in with no blend. |
+| Animated colour | not measured | not measured | not measured | Ready. `color.tracks` of hue, sat, and bright, with the same keyframe eases. The plate `grade` still runs first. |
+| Grain calibrated to hf std | measured | measured | measured | Ready. `grain` is unchanged. `grain_std` is the high-frequency std after a 1.5px blur. |
 
 Templates: `templates/vox.yaml` (ref1), `templates/articles.yaml` (ref2),
 `templates/history.yaml` (ref3). Replica tables, all rows passing:
