@@ -18,6 +18,16 @@ from gilvy.errors import EpisodeError, GilvyError
 from gilvy.formats import DESIGN_H, DESIGN_W
 from gilvy.keyframes import EASES, apply_ease, parse_tracks, sample_keys
 from gilvy.presets import HISTORY, PHOTO_PRESETS, RULES, VOX
+from gilvy.voxlook import (
+    PALETTE,
+    cork_image,
+    draw_card,
+    draw_chip,
+    draw_headline,
+    draw_tag,
+    sans_path,
+    serif_path,
+)
 
 _CACHE: dict[tuple, Image.Image] = {}
 _FONTS: dict[tuple, ImageFont.FreeTypeFont] = {}
@@ -27,7 +37,10 @@ _TRANSITIONS = {"cut", "dissolve", "zoom", "match"}
 # High-frequency std of unit gaussian noise after a 1.5px blur is removed.
 # grain_std asks for that measured std, so the noise amplitude is std / this gain.
 _GRAIN_HF_GAIN = 0.945
-_OVERLAYS = {"text", "highlighter", "circle", "arrow", "strike", "mask", "stamp"}
+_OVERLAYS = {
+    "text", "highlighter", "circle", "arrow", "strike", "mask", "stamp",
+    "headline", "tag", "chip", "card",
+}
 _ENTRANCES = {"fade", "pop", "slide", "typewriter"}
 _FONTS_NAMED = {"serif", "sans"}
 
@@ -56,6 +69,7 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
     params["grain_std"] = _grain_std(raw.get("grain_std"), index)
     params["paper"] = _unit(raw.get("paper", 0.12 if grade == "paper" else 0.0), index, "paper")
     params["color_tracks"] = _color_tracks(raw.get("color"), index)
+    params["backdrop"] = _backdrop(raw.get("backdrop"), index)
     show = raw.get("show_caption", False)
     if not isinstance(show, bool):
         raise EpisodeError(f"scene {index}: show_caption must be true or false")
@@ -158,6 +172,9 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
         return frame
     plate = np.zeros((ch, cw, 3), np.float32)
     plate[:] = np.array(theme.bg, np.float32)
+    if params.get("backdrop") == "cork":
+        cork = np.asarray(cork_image(cw, ch, seed=11), np.float32)
+        plate[:] = cork
     pose = camera_pose(params["camera"], u, duration)
     shake = (0.0, 0.0)
     for effect in params.get("effects") or []:
@@ -192,7 +209,8 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
     velocity = ((pose["x"] - prev["x"]) * max(theme.fps, 1), (pose["y"] - prev["y"]) * max(theme.fps, 1))
     plate = apply_plate_effects(plate, params.get("effects") or [], u, velocity)
     plate = _paint_overlays(
-        plate, theme, params["overlays"], u, duration, scene.get("vo") or "", scene.get("style") or VOX
+        plate, theme, params["overlays"], u, duration, scene.get("vo") or "", scene.get("style") or VOX,
+        episode_dir,
     )
     frame[y0:y0 + ch, x0:x0 + cw] = plate
     if params.get("show_caption"):
@@ -429,7 +447,7 @@ def match_warp(image: np.ndarray, scale: float, ox: float, oy: float, rotation: 
     return np.asarray(canvas, np.float32)
 
 
-def _paint_overlays(plate, theme, overlays, u, duration, vo, style):
+def _paint_overlays(plate, theme, overlays, u, duration, vo, style, episode_dir=""):
     if not overlays:
         return plate
     image = Image.fromarray(np.clip(plate, 0, 255).astype(np.uint8)).convert("RGBA")
@@ -438,17 +456,20 @@ def _paint_overlays(plate, theme, overlays, u, duration, vo, style):
     x0, y0, _, _ = _content_box(theme)
     for item in overlays:
         start = overlay_start(item, vo, duration, style or VOX)
-        _draw_overlay(pen, layer, item, u, start, theme, x0, y0)
+        _draw_overlay(pen, layer, item, u, start, theme, x0, y0, episode_dir)
     image = Image.alpha_composite(image, layer)
     return np.asarray(image.convert("RGB"), np.float32)
 
 
-def _draw_overlay(pen, layer, item, u, start, theme, x0, y0):
+def _draw_overlay(pen, layer, item, u, start, theme, x0, y0, episode_dir=""):
     kind = item["kind"]
     if u < start:
         return
     if kind == "text":
         _draw_text(layer, item, u, start, theme, x0, y0)
+        return
+    if kind in ("headline", "tag", "chip", "card"):
+        _draw_vox_overlay(pen, layer, item, u, start, theme, x0, y0, episode_dir)
         return
     duration = float(item.get("duration") or 0.4)
     progress = cl((u - start) / duration) if duration else 1.0
@@ -628,11 +649,62 @@ def _font(name: str, size: int, font_dir: str) -> ImageFont.FreeTypeFont:
     return font
 
 
+def _overlay_text(item: dict, index: int) -> str:
+    text = item.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise EpisodeError(f"scene {index}: this overlay needs text")
+    return text.strip()
+
+
+def _backdrop(value, index: int) -> str:
+    if value is None:
+        return ""
+    if value != "cork":
+        raise EpisodeError(f"scene {index}: backdrop must be cork")
+    return "cork"
+
+
+def _draw_vox_overlay(pen, layer, item, u, start, theme, x0, y0, episode_dir):
+    del pen
+    origin = _map(theme, item.get("x", 0), item.get("y", 0), x0, y0)
+    scale = theme.fit.scale
+    fonts = theme.fonts()
+    if item["kind"] == "headline":
+        draw_headline(
+            layer, item["text"], origin, max(8, int(round(item["size"] * scale))),
+            item["color"], str(serif_path()),
+        )
+    elif item["kind"] == "tag":
+        draw_tag(
+            layer, item["text"], origin, max(8, int(round(item["size"] * scale))),
+            item["fill"], item["ink"], str(sans_path(fonts)),
+        )
+    elif item["kind"] == "chip":
+        draw_chip(
+            layer, item["text"], item["highlight"], origin,
+            max(8, int(round(item["size"] * scale))),
+            item["color"], item["fill"], str(sans_path(fonts)),
+        )
+    elif item["kind"] == "card":
+        path = Path(episode_dir) / item["src"]
+        if not path.is_file():
+            raise GilvyError(f"missing card image: {path}")
+        with Image.open(path) as opened:
+            card = opened.convert("RGB")
+        draw_card(
+            layer, card, origin,
+            (max(8, int(round(item["w"] * scale))), max(8, int(round(item["h"] * scale)))),
+            item["tilt"], item["shadow"],
+        )
+
+
 def _layers(raw: dict, index: int) -> list[dict]:
     layers = raw.get("layers")
     image = raw.get("image")
     if layers is None and isinstance(image, str):
         layers = [{"src": image, "depth": 1.0}]
+    if (not layers) and raw.get("backdrop") == "cork":
+        return []
     if not isinstance(layers, list) or not layers:
         raise EpisodeError(f"scene {index}: image scenes need image: or a layers list")
     out = []
@@ -702,7 +774,7 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
     for i, item in enumerate(raw):
         if not isinstance(item, dict) or item.get("kind") not in _OVERLAYS:
             raise EpisodeError(
-                f"scene {index}: overlay {i + 1} kind must be text, highlighter, circle, arrow, strike, mask, or stamp"
+                f"scene {index}: overlay {i + 1} kind must be text, headline, tag, chip, card, highlighter, circle, arrow, strike, mask, or stamp"
             )
         kind = item["kind"]
         parsed = {"kind": kind, "color": _color(item.get("color"), index, MEASURED_RED if kind != "highlighter" else (185, 168, 10))}
@@ -732,6 +804,50 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
                           word_seconds=_num(item.get("word_seconds", 0.2), index, "word_seconds", 0.04, 2))
             if item.get("overshoot") is not None:
                 parsed["overshoot"] = _num(item.get("overshoot"), index, "overshoot", 0, 0.8)
+        elif kind == "headline":
+            parsed.update(
+                text=_overlay_text(item, index),
+                size=_num(item.get("size", 108), index, "size", 24, 240),
+                x=_num(item.get("x", 80), index, "x", -200, 1400),
+                y=_num(item.get("y", 280), index, "y", -200, 2100),
+                color=_color(item.get("color"), index, PALETTE["white"]),
+            )
+        elif kind == "tag":
+            parsed.update(
+                text=_overlay_text(item, index),
+                size=_num(item.get("size", 36), index, "size", 16, 120),
+                x=_num(item.get("x", 80), index, "x", -200, 1400),
+                y=_num(item.get("y", 220), index, "y", -200, 2100),
+                fill=_color(item.get("fill"), index, PALETTE["orange"]),
+                ink=_color(item.get("color"), index, PALETTE["white"]),
+            )
+        elif kind == "chip":
+            text = _overlay_text(item, index)
+            highlight = item.get("highlight")
+            if not isinstance(highlight, str) or highlight not in text.split(" "):
+                raise EpisodeError(f"scene {index}: chip highlight must be one whole word of the text")
+            parsed.update(
+                text=text,
+                highlight=highlight,
+                size=_num(item.get("size", 42), index, "size", 16, 96),
+                x=_num(item.get("x", 80), index, "x", -200, 1400),
+                y=_num(item.get("y", 1500), index, "y", -200, 2100),
+                color=_color(item.get("color"), index, PALETTE["white"]),
+                fill=_color(item.get("fill"), index, PALETTE["red"]),
+            )
+        elif kind == "card":
+            src = item.get("src")
+            if not isinstance(src, str) or not src.strip() or src.startswith(("http:", "https:")):
+                raise EpisodeError(f"scene {index}: card overlay needs a local src")
+            parsed.update(
+                src=src.strip(),
+                x=_num(item.get("x", 140), index, "x", -200, 1400),
+                y=_num(item.get("y", 480), index, "y", -200, 2100),
+                w=_num(item.get("w", 420), index, "w", 40, 1000),
+                h=_num(item.get("h", 560), index, "h", 40, 1200),
+                tilt=_num(item.get("tilt", 8), index, "tilt", -18, 18),
+                shadow=_num(item.get("shadow", 0.55), index, "shadow", 0, 1),
+            )
         elif kind == "highlighter":
             parsed.update(duration=_seconds(item.get("duration", 0.40), index, "duration"),
                           ease=_overlay_ease(item.get("ease"), index),
