@@ -5,6 +5,11 @@ episode. A house episode has no `style` (or `style: house`), a still camera,
 and drawn scenes. Set `style: vox-explainer` or `style: history-story` only
 when the picture is an image plate.
 
+For editorial cutouts, paper/photo fragments and object-led handoffs, read
+[the collage contract](COLLAGE.md) / MCP `collage_notes` first. Opt into
+`composition: collage` for explicit fragment placement, per-object transforms,
+episode clocks, attached text/annotations and deliberate reading holds.
+
 Workflow for an agent:
 
 1. `download-reference` when the source is a link, then `analyze-reference` on the local file.

@@ -1,6 +1,6 @@
 """Original 95s fictional SaaS launch film. No assets/audio from Numtera.
 
-Run from an installed checkout: python examples/product/launch/build.py --out out/launch --render
+Run from an installed checkout: python tests/fixtures/product_launch/build.py --out out/launch --render
 """
 
 from __future__ import annotations

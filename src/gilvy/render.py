@@ -11,7 +11,6 @@ import wave
 import os
 import shutil
 import tempfile
-from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -24,8 +23,9 @@ from gilvy.draw import Ctx, compose, grid
 from gilvy.easing import cl, eio
 from gilvy.episode import Episode, Scene, resolve_output
 from gilvy.errors import GilvyError
-from gilvy.image_scene import camera_metrics, match_warp, overlay_start, render_image_frame, zoom_through
+from gilvy.image_scene import camera_metrics, match_warp, overlay_event, overlay_start, render_image_frame, zoom_through
 from gilvy.presets import PHOTO_PRESETS, RULES
+from gilvy.publication import publication_lock as _publication_lock
 from gilvy.qc import _probe, qc_video
 from gilvy.scenes import SCENES, invoke_python
 from gilvy.theme import CRF, PRESET, SAMPLE_RATE, Theme, bundled_fonts
@@ -100,7 +100,7 @@ class RenderState:
     def picture(self, index: int, u: float) -> np.ndarray:
         scene = self.scenes[index]
         if scene["type"] == "image":
-            return render_image_frame(self.theme, scene, max(0.0, u), self.durations[index], self.episode_dir)
+            return render_image_frame(self.theme, scene, max(0.0, u), self.durations[index], self.episode_dir, scene_start=float(self.starts[index]), episode_time=float(self.starts[index]+u))
         return compose(self.paint(index, u))
 
     def frame_array(self, n: int) -> np.ndarray:
@@ -163,10 +163,11 @@ class RenderState:
 
 
 def build_state(episode: Episode, durations: list[float], impls: list | None = None) -> RenderState:
+    _validate_event_ids(episode)
     durs = [float(d) for d in durations]
     from gilvy.image_scene import _metrics_or_raise
     for index, (scene, duration) in enumerate(zip(episode.scenes, durs), 1):
-        if scene.type == "image":
+        if scene.type == "image" and scene.params.get("composition") != "collage":
             _metrics_or_raise(scene.params["camera"], index, episode.style, duration)
     starts = np.cumsum([0.0] + durs)
     if impls is None:
@@ -197,6 +198,7 @@ def scene_durations(episode: Episode, voiced: list[float]) -> list[float]:
 
 
 def preflight(episode: Episode) -> None:
+    _validate_event_ids(episode)
     require_assets(episode)
     ctx = Ctx(theme_for(episode))
     check_captions(ctx, [scene_payload(scene, episode) for scene in episode.scenes])
@@ -452,14 +454,35 @@ def _render_bed(source: Path, total: float, dest: Path, loop: bool, loudness: fl
         raise GilvyError(f"ffmpeg bed failed:\n{run.stderr[-2000:]}")
 
 
+def _validate_event_ids(episode: Episode) -> None:
+    from gilvy.errors import EpisodeError
+    identities = {}
+    for i, scene in enumerate(episode.scenes):
+        for j, overlay in enumerate(scene.params.get("overlays") or []):
+            identity = overlay.get("event_id")
+            if identity is None:
+                continue
+            signature = (overlay.get("at"), overlay.get("sfx"))
+            if identity in identities and identities[identity] != signature:
+                raise EpisodeError(f"conflicting event_id {identity!r}: shared sounds must have the same at and sfx",
+                                   field=f"scenes[{i}].overlays[{j}].event_id")
+            identities[identity] = signature
+
+
 def _sfx_cues(episode: Episode, state: RenderState) -> list[tuple[float, str]]:
     cues = []
+    emitted = set()
     for index, scene in enumerate(episode.scenes):
         params = scene.params or {}
         for overlay in params.get("overlays") or []:
             if overlay.get("sfx"):
-                at = overlay_start(overlay, scene.vo, state.durations[index], episode.style)
-                cues.append((float(state.starts[index]) + at, str(overlay["sfx"])))
+                event = overlay_event(overlay, scene.vo, state.durations[index], episode.style, float(state.starts[index]))
+                identity = event["event_id"]
+                if identity is not None:
+                    if identity in emitted:
+                        continue
+                    emitted.add(identity)
+                cues.append((event["episode_at"], str(event["sfx"])))
     return cues
 
 
@@ -638,14 +661,13 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "vo": scene.vo,
                 "vo_overrun": scene.vo_overrun,
                 "overlay_events": [
-                    {"index": j, "at": overlay_start(o, scene.vo, float(state.durations[i]), episode.style),
-                     "timing": "keyword_estimate" if o.get("keyword") and o.get("at") is None else "explicit",
-                     "sfx": o.get("sfx")}
+                    {"index": j, **overlay_event(o, scene.vo, float(state.durations[i]), episode.style, float(state.starts[i]))}
                     for j, o in enumerate(scene.params.get("overlays") or [])
                 ],
                 **_vo_extent(episode, i, scene, state),
                 **(
-                    {"camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
+                    {"composition": scene.params.get("composition", "plate"),
+                     "camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
                      "transition_out": scene.params.get("transition_out", "cut")}
                     if scene.type == "image" else {}
                 ),
@@ -716,21 +738,6 @@ def output_paths(base: Path, formats: list[str]) -> list[Path]:
     return [base.with_name(f"{base.stem}-{name}{base.suffix}") for name in formats]
 
 
-@contextmanager
-def _publication_lock(output: Path):
-    """Reject concurrent writers, including writers in another process."""
-    import fcntl
-    with output.with_name(f".{output.name}.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise GilvyError(f"render already in progress for {output}") from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
-
-
 def _publish_files(files: list[tuple[Path | None, Path]], build: Path) -> None:
     """Stage backups before replacing anything; roll back ordinary publication failures.
 
@@ -774,8 +781,11 @@ def render_episode(episode: Episode, output: Path, tts_name: str, workers: int, 
     preflight(episode)
     output = Path(output).expanduser().resolve()
     from gilvy.assets import collect_dependencies
-    if output in {Path(d["path"]) for d in collect_dependencies(episode)}:
-        raise GilvyError("output must not replace an input")
+    destinations = {output, output.with_name(output.stem + "_poster.png"),
+                    *(output.with_suffix(suffix) for suffix in (".timeline.json", ".camera.json", ".product.json", ".preview.json"))}
+    inputs = {Path(d["path"]).resolve() for d in collect_dependencies(episode)}
+    if any(path.resolve() in inputs for path in destinations):
+        raise GilvyError("publication output or sidecar must not replace or delete an input")
     output.parent.mkdir(parents=True, exist_ok=True)
     with _publication_lock(output):
         build = Path(tempfile.mkdtemp(prefix=f".{output.stem}-", dir=output.parent))
@@ -790,10 +800,14 @@ def _render_candidate(episode, output, tts_name, workers, build, control):
     control.check()
     voices, durations = prepare_timing(episode, build, tts_name)
     state = build_state(episode, durations)
-    video = build / "vid.mp4"
+    intermediate = build / "intermediate"
+    intermediate.mkdir()
+    candidate_dir = build / "candidate"
+    candidate_dir.mkdir()
+    video = intermediate / "vid.mp4"
     _encode(state, video, workers or default_workers())
     audio = prepare_audio(episode, state, build, voices)
-    candidate = build / output.name
+    candidate = candidate_dir / output.name
     _mux(video, audio, state.total, candidate)
     control.check()
     sheet = build / "sheet.png"

@@ -37,7 +37,7 @@ Then pick a type whose verb is that verb. If none is, write a `python` scene. Th
 
 ## 2. How a directed cut behaves
 
-Study `examples/ep01-mie-ayam.yaml` for the directing, not for the topic.
+For a historical house study, read `references/house/README.md`. Test fixtures establish regression behavior, not a new creative direction.
 
 1. The bowl draws itself. Chopsticks follow. Steam starts. The price arrives only after the object exists.
 2. The same bowl stays. A coin falls into it. The sentence is an assumption. The picture is a fall.

@@ -224,11 +224,10 @@ def tiny_theme(monkeypatch):
 
 def test_sample_episodes_render_and_pass_preset_qc(tiny_theme):
     for name in ("history-story.yaml", "vox-explainer.yaml"):
-        episode = load_episode(ROOT / "examples" / "styles" / name)
+        episode = load_episode(ROOT / "tests/fixtures/episodes" / "styles" / name)
         manifest = build_manifest(episode)
         assert manifest["missing"] == []
         assert manifest["assets"]
-        dest = ROOT / "examples" / "styles" / f"{episode.name}.mp4"
         # Keep the encoded proof out of the repo; the test only needs QC.
         dest = Path("/tmp") / f"{episode.name}.mp4"
         result = render_episode(episode, dest, "fixture", 1)
@@ -240,9 +239,9 @@ def test_cli_and_mcp_expose_styles_and_assets(capsys):
     assert "shot length" in reference_styles().lower() or "Shot length" in reference_styles()
     assert run(["reference-styles"]) == 0
     assert "history-story" in capsys.readouterr().out
-    manifest = json.loads(asset_manifest(str(ROOT / "examples" / "styles" / "vox-explainer.yaml")))
+    manifest = json.loads(asset_manifest(str(ROOT / "tests/fixtures/episodes" / "styles" / "vox-explainer.yaml")))
     assert manifest["ok"] and manifest["missing"] == []
-    assert run(["assets", str(ROOT / "examples" / "styles" / "history-story.yaml")]) == 0
+    assert run(["assets", str(ROOT / "tests/fixtures/episodes" / "styles" / "history-story.yaml")]) == 0
     listed = json.loads(capsys.readouterr().out)
     assert listed["style"] == "history-story"
     assert all(item["exists"] for item in listed["assets"])

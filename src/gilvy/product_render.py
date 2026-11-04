@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from gilvy.errors import GilvyError
 from gilvy.product import finite, load_product
 from gilvy.render_jobs import RenderControl
+from gilvy.publication import publication_lock
 
 
 def preview_product(spec_path, output_dir, times=None):
@@ -55,6 +56,15 @@ def preview_product(spec_path, output_dir, times=None):
 
 
 def render_product(spec_path, output, start=0.0, duration=None, *, control=None):
+    dest = Path(output).expanduser().resolve()
+    if dest.suffix.lower() != ".mp4":
+        raise GilvyError("product output must end in .mp4")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with publication_lock(dest):
+        return _render_product_locked(spec_path, dest, start, duration, control=control)
+
+
+def _render_product_locked(spec_path, output, start=0.0, duration=None, *, control=None):
     control = control or RenderControl()
     control.update("preparing")
     film = load_product(spec_path)

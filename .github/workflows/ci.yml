@@ -29,5 +29,5 @@ jobs:
       - name: Render the Indonesian example and run QC
         run: |
           mkdir -p ci-out
-          docker run --rm -v "$PWD/ci-out:/out" gilvy render /opt/gilvy/examples/ep01-mie-ayam.yaml --tts fixture --out /out/ep01-mie-ayam.mp4
+          docker run --rm -v "$PWD/ci-out:/out" gilvy render /opt/gilvy/smoke/ep01-mie-ayam.yaml --tts fixture --out /out/ep01-mie-ayam.mp4
           docker run --rm -v "$PWD/ci-out:/out" gilvy qc /out/ep01-mie-ayam.mp4

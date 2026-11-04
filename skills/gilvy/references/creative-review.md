@@ -18,15 +18,18 @@ The weak direction is not universally wrong: a moving dot may be right for a
 route or a measured journey. It is weak here because it does not express the
 conflict in this brief. A ring is not automatically a good metaphor either.
 
-Run the stronger motion proof offline:
+This optional house reference lives in a repository checkout, not in a copied
+standalone skill. With that checkout available, replace `<repository-root>` and
+`<output-directory>` below with absolute paths before running the proof offline:
 
 ```bash
-gilvy preview examples/reflection.yaml
-gilvy preview-motion examples/reflection.yaml --duration 7.2 --out out/reflection-proof.mp4
-gilvy render examples/reflection.yaml
+gilvy preview <repository-root>/references/house/reflection.yaml
+gilvy preview-motion <repository-root>/references/house/reflection.yaml --duration 7.2 --out <output-directory>/reflection-proof.mp4
+gilvy render <repository-root>/references/house/reflection.yaml
 ```
 
-This caption-and-ambient example intentionally needs no narration or numeric
+The bundled compositor syntax example remains available without the checkout.
+This caption-and-ambient house reference intentionally needs no narration or numeric
 comparison. Watch the transformation at normal speed; the stills alone do not
 prove its rhythm works.
 

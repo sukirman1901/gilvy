@@ -1,10 +1,11 @@
-# Inbox visual system and motion review
+# Inbox preset geometry and limits
 
-The first product proof demonstrated renderer operations but its sparse UI
-was not a suitable visual standard. The revised reference is an inbox with
-realistic fictional conversation content and an independently staged answer.
+This documents an optional code-drawn inbox preset. The historical screenshot
+below illustrates component geometry; it is not a recommended SaaS composition,
+proof of reference fidelity, or an approved visual standard. The old inbox and
+learning films have been removed from examples after the visual audit.
 
-![Native inbox design](product/inbox.png)
+![Historical inbox preset geometry](product/inbox.png)
 
 ## Design decisions
 
@@ -46,28 +47,14 @@ layer's explicit keyframes. `content.sent: true` changes the reply action to
 sent feedback without moving its text or frame. This is a film, not a network
 request or an email-sending integration.
 
-## Reproduce the review
+## Scope of validation
 
-```bash
-gilvy preview-product examples/product/inbox.yaml --out out/inbox-stills --times 1.5 2.8 4.8 5.9 7.5
-gilvy render-product examples/product/inbox.yaml --out out/inbox.mp4
-```
-
-The eight-second example stages inspection -> relevant source -> suggested
-reply -> send feedback -> full overview. Source/reply entrances last 200ms
-with ease-out; camera movements are longer explanatory moves, not timings
-prescribed for an interactive dropdown. The cursor and UI share the same
-group coordinate space so focus changes cannot detach the pointer from its
-target. No large reveal starts at scale zero. The original `learning.yaml`
-remains a renderer diagnostic, not the visual quality reference.
-
-Review stills at native size and the encoded focus shots. Verify the draft
-fits above its toolbar, the source fits above its link, state feedback is
-triggered at the cursor action, and the overview returns without layout jumps.
-Tests cover long localized text, invalid content, part bounds, state changes,
-contrast and reply updates through the renderer cache. They do not score taste
-or assert user approval. Small-screen video readability and audio sync require
-their own review; no browser breakpoint compliance is implied.
+Tests cover localized text, invalid content, part bounds, state changes,
+contrast, and reply updates through the renderer cache. They do not evaluate
+taste, reference fidelity, motion rhythm, or user approval. Small-screen video
+readability and audio synchronization require a new authored proof. For a new
+product, design its content, hierarchy, and choreography from the brief before
+selecting any of these optional components.
 
 ## References consulted
 

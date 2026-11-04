@@ -1,6 +1,6 @@
 # Opt-in history-story sample. Plates are procedural stand-ins, not reference frames.
-#   gilvy assets examples/styles/history-story.yaml
-#   gilvy render examples/styles/history-story.yaml --tts fixture
+#   gilvy assets tests/fixtures/episodes/styles/history-story.yaml
+#   gilvy render tests/fixtures/episodes/styles/history-story.yaml --tts fixture
 
 name: history-story-sample
 style: history-story

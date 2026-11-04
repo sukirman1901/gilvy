@@ -53,7 +53,7 @@ def test_span_is_still_moving_halfway_through_a_long_scene():
 
 
 def test_square_frame_is_the_profile_size_and_margin_is_background():
-    episode = load_episode(ROOT / "examples" / "ep01-mie-ayam.yaml").with_format("square_1x1")
+    episode = load_episode(ROOT / "tests/fixtures/episodes" / "ep01-mie-ayam.yaml").with_format("square_1x1")
     state = build_state(episode, [4.0] * len(episode.scenes))
     frame = state.frame_array(30)
     assert frame.shape == (1080, 1080, 3)

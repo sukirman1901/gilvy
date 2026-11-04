@@ -16,4 +16,4 @@ Rule:
 4. Setup and CTA may have zero green.
 5. Glow is white light on the focus. The renderer adds one white glow layer; it does not paint a second green shape.
 
-`gilvy qc` on an encode of `examples/ep01-mie-ayam.yaml` reports these ratios at 80% of each scene (Jakarta rounds to 7.8%).
+`gilvy qc` on an encode of `tests/fixtures/episodes/ep01-mie-ayam.yaml` reports these ratios at 80% of each scene (Jakarta rounds to 7.8%).

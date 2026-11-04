@@ -1,6 +1,6 @@
 # Opt-in vox-explainer sample. Plates are procedural stand-ins, not reference frames.
-#   gilvy assets examples/styles/vox-explainer.yaml
-#   gilvy render examples/styles/vox-explainer.yaml --tts fixture
+#   gilvy assets tests/fixtures/episodes/styles/vox-explainer.yaml
+#   gilvy render tests/fixtures/episodes/styles/vox-explainer.yaml --tts fixture
 
 name: vox-explainer-sample
 style: vox-explainer

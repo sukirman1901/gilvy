@@ -135,6 +135,8 @@ def _preset_conformance(report: QCReport, meta: dict) -> None:
         if not camera:
             report.violations.append(f"{label} is an image plate with no camera move recorded")
             continue
+        if scene.get("composition") == "collage" and camera.get("static"):
+            continue  # Object motion and intentional reading holds do not require camera drift.
         problem = camera_problem(camera, rules, label)
         if problem:
             report.violations.append(problem)

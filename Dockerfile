@@ -9,6 +9,9 @@ WORKDIR /opt/gilvy
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 COPY examples ./examples
+COPY references ./references
+# The CI smoke input is regression data, not a bundled creative film.
+COPY tests/fixtures/episodes/ep01-mie-ayam.yaml ./smoke/ep01-mie-ayam.yaml
 COPY skills ./skills
 COPY docs ./docs
 COPY AGENTS.md ./AGENTS.md

@@ -34,7 +34,7 @@ Use `--tts fixture` only to check layout without the network. The voice you ship
 - Paint a second idea green. Caption keys stay white. A word is green only when it starts with `$`, and that should be the same quantity as the one green figure.
 - Move the caption up to chase a safe zone. The baseline is y=1290.
 - Edit `src/gilvy/draw.py` or the scene formulas to fix one episode. Change the YAML, or add a `python` scene that uses the same primitives.
-- Leave a long voice on a scene whose motion already finished. Past 7 seconds the landed object can idle, but a second beat of the same object is the better cut. Chain objects the way `examples/ep01-mie-ayam.yaml` does. Do not zoom the camera to fake motion.
+- Leave a long voice on a scene whose motion already finished. Past 7 seconds the landed object can idle, but a second beat of the same object is the better cut. Chain objects the way `tests/fixtures/episodes/ep01-mie-ayam.yaml` does. Do not zoom the camera to fake motion.
 - Put secrets, account ids, or personal data in an episode, a voice cache, or a commit.
 
 ## Tools
@@ -62,3 +62,19 @@ Image scenes can carry multi-key `camera.tracks` (`scale`, `x`, `y`, `rotation`,
 `history-story` voice timing is not the house 0.6 s breath: pad and lead are 0, and edge-tts clips lose their leading and trailing silence. That is what kept a 31.9 s reference from rendering at 35.6 s. Shot minimum is 1.1 s. Plate zoom may run to about 26%/s (40%/s on a shot of 1.5 s or less) and scale up to 2.4, with exponential zoom so the authored %/s matches a constant-rate measurement. Zoom and pan are independent: the blit shifts the window and repeats the edge if the plate is short, and it does not raise the scale to fund the pan. That clamp was the round-3 miss, where a plate asking for about 8%/s and about 50 px/s rendered near 1.4%/s and a few px/s. A plain dissolve may last up to 2.0 s; an eased one may last 4 s. Photo dissolves are linear alpha unless `transition_ease` is set, so a 10%–90% reading of a linear blend is 80% of that overlap (1.4 s reads as 1.12 s). A plate larger than the frame keeps those extra pixels as pan and zoom margin. `gilvy.measure.motion` scores scale by pixel error after the shift is removed. A phase-correlation peak locks onto grain at scale 1 and reports a floor rate with a wild pan. There is no fade from black at the start. Emphasis text stacks one word per line and shrinks to stay on screen. Sepia runs from `#1a1411` to `#ead0b3`. Optional `music` plus `loudness: -21` (the history default) normalizes the mix. `vo_overrun: true` keeps a long line from stretching the shot; otherwise QC warns that later cuts moved. `gilvy compare` rescales mismatched frames and can cover a full-length window. Green-tint QC is off for that style. `vo_overrun` that talks over the next line is a QC warning. Render writes `<name>.camera.json` with authored and effective zoom and pan. `gilvy assets --per-shot --frames N` QCs each plate against its own scene frame.
 
 The color rule with the original measured ratios is `docs/color-rule.md`.
+
+Editorial collage: read `src/gilvy/COLLAGE.md` / MCP `collage_notes` before
+generating assets. Use `composition: collage` for bounded PNG/photo/paper
+fragments, independent tracks and attached annotations. State the intended
+relationship between cutouts; co-location in one photo needs evidence. Keep
+scene briefs separate from per-asset prompts. Inspect native beginning/end
+poses and a boundary-spanning proof before extending the film.
+
+## Example quality boundary
+
+Read `examples/README.md` and `docs/examples-audit.md`. API examples demonstrate
+syntax; `tests/fixtures/` provides technical regression inputs and must never
+be used as a creative standard. `references/house/` preserves earlier accepted
+house studies only. There is no bundled approved Vox or SaaS master. A preset
+name, photographic cutout, measured track, or passing test does not establish
+reference fidelity. Build a new composition from the actual supplied reference.
