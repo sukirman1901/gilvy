@@ -324,13 +324,23 @@ ffmpeg must be on `PATH`. Poppins ships inside the package (OFL). Do not point f
 
 ## Reference presets
 
+For an editorial collage with PNG cutouts, paper, photos and movable data
+pages, first read [the collage contract](../../src/gilvy/COLLAGE.md) / MCP
+`collage_notes`. Plan object/action/carry and asset roles before generation;
+keep narrative context out of each isolated asset prompt. Use
+`composition: collage` with placement, independent tracks and attached
+annotations. Inspect native pose pairs and a boundary-spanning motion proof;
+a storyboard or a colour metric does not establish playback quality.
+
 House episodes stay on the directing notes above. To match a Vox explainer or a sepia history short, use the opt-in path and do not zoom a house scene:
 
 1. `gilvy download-reference <url> --out <new dir>` when the source is a link, then `gilvy analyze-reference <video> --out <new dir>`.
 2. Read `soft_transitions` as dissolve candidates. Watch every clip. Pass `--boundaries` only after you agree the join is real.
 3. Pick `style: vox-explainer` or `style: history-story`. The numbers, tags (measured, observed, inferred, uncertain), and gaps are in `gilvy reference-styles` / MCP `reference_styles`.
 4. `gilvy assets episode.yaml --reference <video>`. The manifest carries the fixed prompt template (history-story: archival photo, sepia, grain, vignette, framing), an overscan pixel size, and style frames. `--frames N` sets the count. `--per-shot` compares each plate to that scene's own frame. Generate every missing PNG from that prompt. Run `assets` again; a colour, contrast, or brightness miss includes a regen hint. Do not commit reference frames.
-5. Preview, watch a short motion proof, `gilvy render`, then `gilvy qc`. Image plates must sit in the preset's shot-length and zoom band, and they must move. Zoom does not increase to make room for a pan. `history-story` has no intro fade, stacks emphasis words, allows a dissolve up to 2.0 s, and warns when a voice line is longer than its shot unless `vo_overrun: true`. A line that then overlaps the next voice is a warning too. Render writes `<name>.camera.json` (authored zoom and pan beside the values the camera applies). `gilvy compare` rescales different frame sizes and can cover the whole cut.
+For `composition: collage`, use each asset's own prompt and the separate scene brief; compare the rendered composition rather than histogram-matching each fragment to a complete reference frame.
+
+5. Preview, watch a short motion proof, `gilvy render`, then `gilvy qc`. Legacy image plates must sit in the preset's shot-length and zoom band, and they must move. Zoom does not increase to make room for a pan. `history-story` has no intro fade, stacks emphasis words, allows a dissolve up to 2.0 s, and warns when a voice line is longer than its shot unless `vo_overrun: true`. A line that then overlaps the next voice is a warning too. Render writes `<name>.camera.json` (authored zoom and pan beside the values the camera applies). `gilvy compare` rescales different frame sizes and can cover the whole cut.
 
 Samples: `examples/styles/vox-explainer.yaml`, `examples/styles/history-story.yaml`. Their plates are procedural stand-ins.
 - **Claude Code.** `.mcp.json`:

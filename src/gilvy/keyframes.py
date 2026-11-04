@@ -84,7 +84,7 @@ def sample_keys(keys: list[dict], time: float, duration: float) -> float:
     return float(keys[-1]["v"])
 
 
-def parse_tracks(raw, index: int, scale_max: float) -> dict[str, list[dict]]:
+def parse_tracks(raw, index: int, scale_max: float, *, time_limit: float = 30, scale_min: float = .5) -> dict[str, list[dict]]:
     if raw is None:
         return {}
     if not isinstance(raw, list):
@@ -98,16 +98,20 @@ def parse_tracks(raw, index: int, scale_max: float) -> dict[str, list[dict]]:
             raise EpisodeError(
                 f"scene {index}: track property must be scale, x, y, rotation, or opacity"
             )
+        if prop in tracks:
+            raise EpisodeError(f"scene {index}: duplicate track property {prop}")
         keys = item.get("keys")
         if not isinstance(keys, list) or len(keys) < 2:
             raise EpisodeError(f"scene {index}: track {prop} needs at least two keys")
-        parsed = [_key(key, index, prop, scale_max) for key in keys]
+        parsed = [_key(key, index, prop, scale_max, time_limit, scale_min) for key in keys]
+        if len({key["t"] for key in parsed}) != len(parsed):
+            raise EpisodeError(f"scene {index}: track {prop} has duplicate key times")
         parsed.sort(key=lambda row: row["t"])
         tracks[prop] = parsed
     return tracks
 
 
-def _key(raw, index: int, prop: str, scale_max: float) -> dict:
+def _key(raw, index: int, prop: str, scale_max: float, time_limit: float = 30, scale_min: float = .5) -> dict:
     if not isinstance(raw, dict):
         raise EpisodeError(f"scene {index}: a key must be a mapping")
     try:
@@ -115,8 +119,10 @@ def _key(raw, index: int, prop: str, scale_max: float) -> dict:
         v = float(raw["v"])
     except (KeyError, TypeError, ValueError) as exc:
         raise EpisodeError(f"scene {index}: a key needs numeric t and v") from exc
-    if not math.isfinite(t) or t < 0 or t > 30:
-        raise EpisodeError(f"scene {index}: key t must be seconds from 0 to 30")
+    if isinstance(raw.get("t"), bool) or isinstance(raw.get("v"), bool) or not math.isfinite(v):
+        raise EpisodeError(f"scene {index}: key t and v must be finite numbers")
+    if not math.isfinite(t) or t < 0 or t > time_limit:
+        raise EpisodeError(f"scene {index}: key t must be seconds from 0 to {time_limit:g}")
     ease = raw.get("ease") or "linear"
     if ease not in EASES:
         raise EpisodeError(f"scene {index}: ease must be one of {', '.join(EASES)}")
@@ -125,9 +131,14 @@ def _key(raw, index: int, prop: str, scale_max: float) -> dict:
         points = raw.get("bezier")
         if not isinstance(points, (list, tuple)) or len(points) != 4:
             raise EpisodeError(f"scene {index}: cubic-bezier needs bezier: [x1, y1, x2, y2]")
-        bezier = tuple(float(n) for n in points)
-    if prop == "scale" and not 0.5 <= v <= scale_max:
-        raise EpisodeError(f"scene {index}: scale key must be from 0.5 to {scale_max}")
+        try:
+            bezier = tuple(float(n) for n in points)
+        except (ValueError, TypeError) as exc:
+            raise EpisodeError(f"scene {index}: invalid cubic-bezier control values") from exc
+        if not all(math.isfinite(n) for n in bezier) or not 0 <= bezier[0] <= 1 or not 0 <= bezier[2] <= 1:
+            raise EpisodeError(f"scene {index}: Bezier x controls must be 0..1 and all controls finite")
+    if prop == "scale" and not scale_min <= v <= scale_max:
+        raise EpisodeError(f"scene {index}: scale key must be from {scale_min} to {scale_max}")
     if prop == "opacity" and not 0 <= v <= 1:
         raise EpisodeError(f"scene {index}: opacity key must be from 0 to 1")
     if prop == "rotation" and not -180 <= v <= 180:

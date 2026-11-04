@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 from gilvy.errors import GilvyError
+from gilvy.collage import asset_integrity
 from gilvy.formats import DESIGN_H, DESIGN_W
 from gilvy.presets import PHOTO_PRESETS, STYLE_PROMPTS
 
@@ -52,9 +53,10 @@ def plate_pixel_size(camera: dict) -> dict:
     blow-up of too few pixels.
     """
     start, end = camera["from"], camera["to"]
-    pan_x = max(abs(float(start["x"])), abs(float(end["x"])))
-    pan_y = max(abs(float(start["y"])), abs(float(end["y"])))
-    tight = max(float(start["scale"]), float(end["scale"]), 1.0)
+    tracks = camera.get("tracks") or {}
+    pan_x = max([abs(float(start["x"])), abs(float(end["x"]))] + [abs(k["v"]) for k in tracks.get("x", [])])
+    pan_y = max([abs(float(start["y"])), abs(float(end["y"]))] + [abs(k["v"]) for k in tracks.get("y", [])])
+    tight = max([float(start["scale"]), float(end["scale"]), 1.0] + [k["v"] for k in tracks.get("scale", [])])
     width = int(math.ceil((DESIGN_W + 2 * pan_x) * tight))
     height = int(math.ceil((DESIGN_H + 2 * pan_y) * tight))
     return {"width": width, "height": height, "pan_x": pan_x, "pan_y": pan_y, "scale": tight}
@@ -196,24 +198,46 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
         if scene.type != "image":
             continue
         layers = scene.params.get("layers") or []
-        size = plate_pixel_size(scene.params["camera"])
+        camera_size = plate_pixel_size(scene.params["camera"])
+        collage = scene.params.get("composition") == "collage"
         for layer in layers:
+            size = camera_size.copy()
+            if "placement" in layer:
+                placement = layer["placement"]
+                peak = max([1.0] + [key["v"] for key in (layer.get("tracks") or {}).get("scale", [])])
+                gain = .25+.75*layer["depth"]
+                peak *= placement["scale"]*(1+(camera_size["scale"]-1)*gain)
+                size = {"width": math.ceil(placement["width"]*peak), "height": math.ceil(placement["height"]*peak),
+                        "scale": peak, "pan_x": 0, "pan_y": 0}
             src = layer["src"]
             path = Path(src)
             if not path.is_absolute():
                 path = episode.source_dir / path
             path = path.resolve()
-            role = _role(float(layer.get("depth", 1)), len(layers))
-            subject = " ".join(part for part in (scene.params.get("prompt") or "", layer.get("prompt") or "") if part)
-            prompt = prefix
-            if role != "still":
-                prompt += f" This file is the {role} layer of a parallax stack."
-            if subject:
-                prompt += " " + subject
-            prompt += (
-                f" Generate {size['width']}×{size['height']} so a pan of "
-                f"{size['pan_x']:.0f}×{size['pan_y']:.0f}px and a zoom of {size['scale']:.2f} stay inside the picture."
-            )
+            role = layer.get("role") or _role(float(layer.get("depth", 1)), len(layers))
+            if collage:
+                # The story brief is metadata, not a command to merge every noun
+                # into this one asset (e.g. a pump physically standing in a field).
+                prompt = (f"Create one {role} asset for an editorial collage. "
+                          "Match the supplied material/lighting reference. "
+                          "Include only the subject described for this asset; no narrative text or watermark. ")
+                prompt += layer.get("prompt") or "Describe this asset's subject before generation."
+                if layer.get("alpha") == "transparent":
+                    prompt += " Isolate the complete silhouette on real transparent alpha; no drawn checkerboard or opaque scenery."
+                elif layer.get("alpha") == "opaque":
+                    prompt += " Produce a complete opaque plate. Fill areas that will be uncovered by moving cutouts."
+                prompt += f" Target source size {size['width']}×{size['height']}px; preserve identity and framing from the selected master."
+            else:
+                subject = " ".join(part for part in (scene.params.get("prompt") or "", layer.get("prompt") or "") if part)
+                prompt = prefix
+                if role != "still":
+                    prompt += f" This file is the {role} layer of a parallax stack."
+                if subject:
+                    prompt += " " + subject
+                prompt += (
+                    f" Generate {size['width']}×{size['height']} so a pan of "
+                    f"{size['pan_x']:.0f}×{size['pan_y']:.0f}px and a zoom of {size['scale']:.2f} stay inside the picture."
+                )
             item = {
                 "scene_index": index,
                 "scene_id": scene.id or f"s{index}",
@@ -227,7 +251,13 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
                 "overscan": {"pan_x": size["pan_x"], "pan_y": size["pan_y"], "scale": size["scale"]},
                 "prompt": prompt.strip(),
             }
-            if style_refs and path.is_file():
+            if collage:
+                item.update({"layer_id": layer["id"], "alpha": layer.get("alpha", "any"),
+                             "clock": layer.get("clock", "scene"), "placement": layer.get("placement"),
+                             "scene_brief": scene.params.get("prompt", ""),
+                             "style_qc": {"status": "not_comparable", "reason": "Compare the rendered collage, not a fragment against a complete reference frame."}})
+                if path.is_file(): item["asset_integrity"] = asset_integrity(path, layer.get("alpha", "any"))
+            if style_refs and path.is_file() and not collage:
                 scoped = style_refs
                 if any(ref.get("scene_index") is not None for ref in style_refs):
                     scoped = [ref for ref in style_refs if ref.get("scene_index") == index]
@@ -257,6 +287,9 @@ def require_assets(episode) -> None:
         return
     manifest = build_manifest(episode)
     if not manifest["missing"]:
+        invalid = [item for item in manifest["assets"] if item.get("asset_integrity", {}).get("ok") is False]
+        if invalid:
+            raise GilvyError("invalid collage assets: " + "; ".join(f"{item['src']}: {item['asset_integrity']['flags']}" for item in invalid))
         return
     lines = []
     for item in manifest["assets"]:
