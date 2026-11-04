@@ -153,11 +153,16 @@ contrast, and colour and adds a regen hint on a miss. Render fails if a path is
 missing. Generate the art outside the repo. Do not commit frames from the
 reference. Samples under `examples/styles/` use procedural stand-in plates.
 MCP `asset_manifest` takes the same optional reference. `history-story` uses pad/lead 0, no intro fade, exponential zoom up to about
-26%/s, stacked emphasis type, and sepia from `#1a1411` to `#ead0b3`. Optional
-`music` is ducked under the voice and normalized to the preset loudness
+26%/s, stacked emphasis type, and sepia from `#1a1411` to `#ead0b3`. Pan does
+not raise the zoom: the window shifts, and a short plate repeats its edge.
+Optional `music` is ducked under the voice and normalized to the preset loudness
 (`-21` LUFS). `vo_overrun: true` lets a long line play into the next shot;
-otherwise QC warns that later cuts moved. `gilvy compare` rescales mismatched
-frames and accepts a window longer than 12 seconds. edge-tts is pinned to 7.3.1.
+otherwise QC warns that later cuts moved, and an overrun that overlaps the next
+line is a warning too. A dissolve may last 2.0 s. Render writes
+`<name>.camera.json` with authored and effective zoom and pan. `gilvy assets
+--per-shot --frames N` checks each plate against its own frame.
+`gilvy compare` rescales mismatched frames and accepts a window longer than 12
+seconds. edge-tts is pinned to 7.3.1.
 
 ## Opt-in product motion
 

@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from gilvy.assets import build_manifest, extract_style_refs
+from gilvy.assets import build_manifest, extract_style_refs, shot_spans
 from gilvy.episode import load_episode, resolve_output
 from gilvy.errors import GilvyError
 from gilvy.formats import get_profile
@@ -238,6 +238,9 @@ def run(argv: list[str] | None = None) -> int:
     assets.add_argument("episode")
     assets.add_argument("--reference", help="local video; extract style reference frames and QC plates against them")
     assets.add_argument("--refs-out", help="directory for style frames (default: <episode>/style-refs)")
+    assets.add_argument("--frames", type=int, default=4, help="how many style frames to sample (1..32)")
+    assets.add_argument("--per-shot", action="store_true",
+                        help="one style frame at each image scene's midpoint, QC against that frame")
     sub.add_parser("mcp", help="MCP server on stdio")
 
     args = parser.parse_args(argv)
@@ -292,7 +295,11 @@ def run(argv: list[str] | None = None) -> int:
             refs = None
             if args.reference:
                 dest = Path(args.refs_out).expanduser() if args.refs_out else episode.source_dir / "style-refs"
-                refs = extract_style_refs(args.reference, dest)
+                refs = extract_style_refs(
+                    args.reference, dest,
+                    count=args.frames,
+                    shots=shot_spans(episode) if args.per_shot else None,
+                )
             print(json.dumps(build_manifest(episode, refs), indent=2))
             return 0
         if args.command == "new":

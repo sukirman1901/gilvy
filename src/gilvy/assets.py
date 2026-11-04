@@ -71,23 +71,48 @@ def _duration(video: Path) -> float:
     return float(text)
 
 
-def extract_style_refs(video: str | Path, dest: str | Path, count: int = 4) -> list[dict]:
-    """Grab interior frames as style references. Does not copy them into the repo."""
+def shot_spans(episode) -> list[tuple[float, float, int]]:
+    """Authored shot clock from each scene's min, for per-shot style frames."""
+    clock = 0.0
+    spans = []
+    for index, scene in enumerate(episode.scenes, 1):
+        if scene.type != "image":
+            continue
+        dur = float(scene.min or 0)
+        spans.append((clock, clock + dur, index))
+        clock += dur
+    return spans
+
+
+def extract_style_refs(video: str | Path, dest: str | Path, count: int = 4,
+                       shots: list[tuple[float, float, int]] | None = None) -> list[dict]:
+    """Grab style frames. `shots` takes one frame at each shot's midpoint.
+
+    Without shots, `count` samples the interior of the file (1..32). Does not
+    copy the frames into the repo.
+    """
     source = Path(video).expanduser().resolve()
     if not source.is_file():
         raise GilvyError(f"reference video not found: {source}")
-    if count < 1 or count > 8:
-        raise GilvyError("style reference frame count must be from 1 to 8")
     out = Path(dest).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
     duration = _duration(source)
     if duration <= 0:
         raise GilvyError(f"reference video has no duration: {source}")
-    # Stay off the first and last 8% so a fade-in or end card is not the style.
-    fractions = [0.12 + (0.76 * (i + 0.5) / count) for i in range(count)]
+    moments: list[tuple[float, int | None]] = []
+    if shots:
+        if not 1 <= len(shots) <= 60:
+            raise GilvyError("per-shot style frames need 1 to 60 shots")
+        for start, end, scene_index in shots:
+            moments.append((min(duration - 0.05, max(0.0, (start + end) / 2)), scene_index))
+    else:
+        if count < 1 or count > 32:
+            raise GilvyError("style reference frame count must be from 1 to 32")
+        for index in range(count):
+            fraction = 0.12 + (0.76 * (index + 0.5) / count)
+            moments.append((duration * fraction, None))
     frames = []
-    for index, fraction in enumerate(fractions, 1):
-        moment = duration * fraction
+    for index, (moment, scene_index) in enumerate(moments, 1):
         path = out / f"ref-{index:02d}.png"
         run = subprocess.run(
             ["ffmpeg", "-v", "error", "-y", "-ss", f"{moment:.3f}", "-i", str(source),
@@ -96,7 +121,10 @@ def extract_style_refs(video: str | Path, dest: str | Path, count: int = 4) -> l
         )
         if run.returncode != 0 or not path.is_file():
             raise GilvyError(f"could not extract a style frame at {moment:.2f}s from {source.name}")
-        frames.append({"time": round(moment, 3), "path": str(path)})
+        row = {"time": round(moment, 3), "path": str(path)}
+        if scene_index is not None:
+            row["scene_index"] = scene_index
+        frames.append(row)
     return frames
 
 
@@ -200,7 +228,11 @@ def build_manifest(episode, style_refs: list | None = None) -> dict:
                 "prompt": prompt.strip(),
             }
             if style_refs and path.is_file():
-                item["image_qc"] = compare_asset(path, style_refs)
+                scoped = style_refs
+                if any(ref.get("scene_index") is not None for ref in style_refs):
+                    scoped = [ref for ref in style_refs if ref.get("scene_index") == index]
+                if scoped:
+                    item["image_qc"] = compare_asset(path, scoped)
             assets.append(item)
     qc_rows = [item["image_qc"] for item in assets if "image_qc" in item]
     return {
