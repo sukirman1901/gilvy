@@ -1,0 +1,82 @@
+{
+  "window_s": 15.2,
+  "rows": [
+    {
+      "effect": "open pan x px/s",
+      "ref": 12.4,
+      "replica": 11.888,
+      "delta": -0.512,
+      "pass": true
+    },
+    {
+      "effect": "open pan y px/s",
+      "ref": 14.1,
+      "replica": 12.71,
+      "delta": -1.39,
+      "pass": true
+    },
+    {
+      "effect": "dissolve long s",
+      "ref": 1.46,
+      "replica": 0.833,
+      "delta": -0.627,
+      "pass": false
+    },
+    {
+      "effect": "pull zoom %/s",
+      "ref": -3.17,
+      "replica": 2.314,
+      "delta": 5.484,
+      "pass": false
+    },
+    {
+      "effect": "pull rotation deg",
+      "ref": 1.11,
+      "replica": 0.81,
+      "delta": -0.3,
+      "pass": true
+    },
+    {
+      "effect": "dissolve short s",
+      "ref": 0.709,
+      "replica": 0.458,
+      "delta": -0.251,
+      "pass": true
+    },
+    {
+      "effect": "drift zoom %/s",
+      "ref": -1.44,
+      "replica": -0.138,
+      "delta": 1.302,
+      "pass": false
+    },
+    {
+      "effect": "sweep pan y px/s",
+      "ref": -58.9,
+      "replica": -57.529,
+      "delta": 1.371,
+      "pass": true
+    },
+    {
+      "effect": "whip present",
+      "ref": true,
+      "replica": true,
+      "delta": null,
+      "pass": true
+    },
+    {
+      "effect": "push zoom %/s",
+      "ref": 11.38,
+      "replica": 32.62,
+      "delta": 21.24,
+      "pass": false
+    },
+    {
+      "effect": "shake Hz",
+      "ref": 9.92,
+      "replica": 10.29,
+      "delta": 0.37,
+      "pass": true
+    }
+  ]
+}

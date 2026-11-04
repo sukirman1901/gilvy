@@ -1,5 +1,6 @@
 """Keyframe tracks and the effect library, checked by rendering and detecting."""
 
+import json
 import math
 from pathlib import Path
 
@@ -91,8 +92,9 @@ scenes:
         load_episode(path)
 
 
-def test_multikey_expo_out_is_recovered(tmp_path, monkeypatch):
-    _, video, result = _render(tmp_path, monkeypatch, """
+@pytest.mark.parametrize("ease", ["linear", "easeInCubic", "expoIn", "expoOut"])
+def test_zoom_rate_is_within_five_percent(tmp_path, monkeypatch, ease):
+    _, video, result = _render(tmp_path, monkeypatch, f"""
 name: zoom
 style: history-story
 audio_mode: silent
@@ -107,16 +109,24 @@ scenes:
       tracks:
         - property: scale
           keys:
-            - {t: 0.0, v: 1.0, ease: expoOut}
-            - {t: 1.2, v: 1.35, ease: linear}
+            - {{t: 0.0, v: 1.0, ease: {ease}}}
+            - {{t: 1.2, v: 1.35, ease: linear}}
 """)
     assert result["qc"]["ok"], result["qc"]
     shot = detect_shot(video)
     zoom = next(item for item in shot["events"] if item["effect"] == "zoom")
     authored = 100 * math.log(1.35) / 1.2
-    assert zoom["zoom_pct_per_s"] == pytest.approx(authored, rel=0.20, abs=5)
-    assert zoom["ease"] in {"expoOut", "easeOutQuad", "easeOutCubic"}
-    assert zoom["rmse"] < zoom["linear_rmse"]
+    assert zoom["zoom_pct_per_s"] == pytest.approx(authored, rel=0.05)
+    if ease == "linear":
+        assert zoom["ease"] == "linear"
+    elif ease == "easeInCubic":
+        assert zoom["ease"] == "easeInCubic"
+    elif ease == "expoIn":
+        assert zoom["ease"] == "expoIn"
+    else:
+        assert zoom["ease"] == "expoOut"
+    if ease != "linear":
+        assert zoom["rmse"] < zoom["linear_rmse"]
 
 
 def test_fit_ease_prefers_expo_in_over_linear():
@@ -336,6 +346,18 @@ scenes:
     shot = detect_shot(video)
     onset = next(item for item in shot["events"] if item["effect"] == "sfx")
     assert abs(onset["time"] - 0.45) <= 2 / 20
+
+
+def test_vox_replica_table_records_the_check():
+    data = json.loads((ROOT / "tests" / "fixtures" / "vox_replica_table.json").read_text(encoding="utf-8"))
+    rows = data["rows"]
+    assert rows
+    for row in rows:
+        assert {"effect", "ref", "replica", "delta", "pass"} <= set(row)
+    by_name = {row["effect"]: row for row in rows}
+    assert by_name["shake Hz"]["pass"] is True
+    assert by_name["whip present"]["pass"] is True
+    assert by_name["pull rotation deg"]["pass"] is True
 
 
 def test_inventory_pins_and_vox_template():

@@ -338,8 +338,19 @@ def analyze_reference(video_path: str | Path, output_dir: str | Path,
     keyframes = dest / "keyframes.yaml"
     try:
         import yaml
-        from gilvy.measure import detect_shot, keyframe_document
-        document = keyframe_document(detect_shot(source), source.stem)
+        from gilvy.measure import detect_shot
+        scene_rows = []
+        for scene in scenes:
+            clip = scene["clips"][0]["path"] if scene.get("clips") else None
+            shot = detect_shot(clip) if clip else {"tracks": [], "events": []}
+            scene_rows.append({
+                "id": scene["id"],
+                "start": round(float(scene["start"]), 3),
+                "end": round(float(scene["end"]), 3),
+                "tracks": shot.get("tracks") or [],
+                "events": shot.get("events") or [],
+            })
+        document = {"name": source.stem, "scenes": scene_rows}
         keyframes.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
         result["keyframes"] = str(keyframes)
     except Exception as exc:
