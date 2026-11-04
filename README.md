@@ -249,3 +249,13 @@ it is silent and does not promise real-time playback. MCP adds
 `inspect_product_frame`, `start_product_render`, `product_render_status` and
 `cancel_product_render`. Jobs are process-local, not a persistent queue.
 Read [the composition contract and limits](docs/composition-runtime.md).
+
+## Editorial collage
+
+Opt into `composition: collage` inside a `history-story` or `vox-explainer`
+image scene to compose explicitly sized cutouts, photo fragments and paper.
+Each object can translate, scale, rotate and fade, with scene/episode clocks.
+Native text and annotations can follow a parent paper layer and be occluded
+by later objects. `gilvy collage-notes` / MCP `collage_notes` explains the
+[asset and motion contract](src/gilvy/COLLAGE.md), including alpha preflight,
+per-asset prompts and a runnable diagnostic example.

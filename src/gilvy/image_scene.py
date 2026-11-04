@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from gilvy.easing import cl, eio, eo
+from gilvy.collage import parse_fragment, blit_fragment, track_time
 from gilvy.effects import apply_plate_effects, draw_mask, draw_strike, parse_effects, shake_offset, typewriter_count
 from gilvy.errors import EpisodeError, GilvyError
 from gilvy.formats import DESIGN_H, DESIGN_W
@@ -58,14 +59,18 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
         )
     rules = RULES[style]
     params = {}
+    composition = raw.get("composition", "plate")
+    if composition not in ("plate", "collage"):
+        raise EpisodeError(f"scene {index}: composition must be plate or collage")
+    params["composition"] = composition
     layers = _layers(raw, index)
     params["layers"] = layers
     params["camera"] = _camera(raw.get("camera"), index, rules)
-    grade = raw.get("grade", rules["default_grade"])
+    grade = raw.get("grade", "none" if composition == "collage" else rules["default_grade"])
     if grade not in _GRADES:
         raise EpisodeError(f"scene {index}: grade must be none, sepia, or paper")
     params["grade"] = grade
-    params["grain"] = _unit(raw.get("grain", rules["default_grain"]), index, "grain")
+    params["grain"] = _unit(raw.get("grain", 0 if composition == "collage" else rules["default_grain"]), index, "grain")
     params["grain_std"] = _grain_std(raw.get("grain_std"), index)
     params["paper"] = _unit(raw.get("paper", 0.12 if grade == "paper" else 0.0), index, "paper")
     params["color_tracks"] = _color_tracks(raw.get("color"), index)
@@ -103,8 +108,13 @@ def parse_image_params(raw: dict, index: int, style: str) -> dict:
     params["prompt"] = prompt.strip()
     params["text_fade_s"] = _fade_seconds(raw.get("text_fade_s", rules["text_fade_s"]), index)
     params["overlays"] = _overlays(raw.get("overlays") or [], index, rules, params["text_fade_s"])
+    placed_ids = {layer["id"] for layer in layers if "placement" in layer}
+    for overlay in params["overlays"]:
+        if overlay.get("parent") is not None and overlay["parent"] not in placed_ids:
+            raise EpisodeError(f"scene {index}: overlay parent must name a placed layer")
     params["effects"] = parse_effects(raw.get("effects"), index)
-    _metrics_or_raise(params["camera"], index, style)
+    if composition != "collage":
+        _metrics_or_raise(params["camera"], index, style)
     return params
 
 
@@ -162,7 +172,7 @@ def overlay_start(overlay: dict, vo: str, duration: float, style: str) -> float:
     return max(0.0, base + lead)
 
 
-def render_image_frame(theme, scene: dict, u: float, duration: float, episode_dir: str) -> np.ndarray:
+def render_image_frame(theme, scene: dict, u: float, duration: float, episode_dir: str, *, scene_start: float = 0, episode_time: float | None = None) -> np.ndarray:
     """One RGB float32 frame at the theme's delivery size."""
     params = scene["params"]
     frame = np.empty((theme.height, theme.width, 3), np.float32)
@@ -182,18 +192,36 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
             dx, dy = shake_offset(effect, u)
             shake = (shake[0] + dx, shake[1] + dy)
     for layer in params["layers"]:
+        if "placement" in layer:
+            def paint_attached(plane):
+                pen = ImageDraw.Draw(plane)
+                for item in params["overlays"]:
+                    if item.get("parent") != layer["id"]: continue
+                    time = track_time(item, u, scene_start, episode_time)
+                    start = overlay_start(item, scene.get("vo") or "", duration, scene.get("style") or VOX)
+                    _draw_overlay(pen, plane, item, time, start, theme, theme.fit.ox, theme.fit.oy, episode_dir)
+            blit_fragment(plate, _load(Path(episode_dir) / layer["src"]), layer, pose, u, duration, theme.fit.scale, scene_start, shake, episode_time, paint_attached)
+            continue
         gain = 0.25 + 0.75 * float(layer["depth"])
         tracks = layer.get("tracks") or {}
+        clock = track_time(layer, u, scene_start, episode_time)
         scale = 1.0 + (pose["scale"] - 1.0) * gain
         if "scale" in tracks:
-            scale *= sample_keys(tracks["scale"], u, duration)
+            scale *= sample_keys(tracks["scale"], clock, duration)
         ox = pose["x"] * gain * theme.fit.scale + shake[0]
         oy = pose["y"] * gain * theme.fit.scale + shake[1]
         if "x" in tracks:
-            ox += sample_keys(tracks["x"], u, duration)
+            ox += sample_keys(tracks["x"], clock, duration)
         if "y" in tracks:
-            oy += sample_keys(tracks["y"], u, duration)
-        _blit(plate, _load(Path(episode_dir) / layer["src"]), scale, ox, oy)
+            oy += sample_keys(tracks["y"], clock, duration)
+        image = _load(Path(episode_dir) / layer["src"])
+        if "rotation" in tracks:
+            image = image.rotate(-sample_keys(tracks["rotation"], clock, duration), resample=Image.Resampling.BICUBIC, expand=False)
+        if "opacity" in tracks:
+            image = image.copy()
+            opacity = sample_keys(tracks["opacity"], clock, duration)
+            image.putalpha(image.getchannel("A").point(lambda a: round(a*opacity)))
+        _blit(plate, image, scale, ox, oy)
     if abs(pose["rotation"]) > 0.05:
         turned = Image.fromarray(np.clip(plate, 0, 255).astype(np.uint8)).rotate(
             -pose["rotation"], resample=Image.Resampling.BICUBIC, expand=False,
@@ -209,8 +237,8 @@ def render_image_frame(theme, scene: dict, u: float, duration: float, episode_di
     velocity = ((pose["x"] - prev["x"]) * max(theme.fps, 1), (pose["y"] - prev["y"]) * max(theme.fps, 1))
     plate = apply_plate_effects(plate, params.get("effects") or [], u, velocity)
     plate = _paint_overlays(
-        plate, theme, params["overlays"], u, duration, scene.get("vo") or "", scene.get("style") or VOX,
-        episode_dir,
+        plate, theme, [item for item in params["overlays"] if not item.get("parent")], u, duration,
+        scene.get("vo") or "", scene.get("style") or VOX, episode_dir, scene_start, episode_time
     )
     frame[y0:y0 + ch, x0:x0 + cw] = plate
     if params.get("show_caption"):
@@ -447,7 +475,7 @@ def match_warp(image: np.ndarray, scale: float, ox: float, oy: float, rotation: 
     return np.asarray(canvas, np.float32)
 
 
-def _paint_overlays(plate, theme, overlays, u, duration, vo, style, episode_dir=""):
+def _paint_overlays(plate, theme, overlays, u, duration, vo, style, episode_dir="", scene_start=0, episode_time=None):
     if not overlays:
         return plate
     image = Image.fromarray(np.clip(plate, 0, 255).astype(np.uint8)).convert("RGBA")
@@ -456,7 +484,8 @@ def _paint_overlays(plate, theme, overlays, u, duration, vo, style, episode_dir=
     x0, y0, _, _ = _content_box(theme)
     for item in overlays:
         start = overlay_start(item, vo, duration, style or VOX)
-        _draw_overlay(pen, layer, item, u, start, theme, x0, y0, episode_dir)
+        time = track_time(item, u, scene_start, episode_time)
+        _draw_overlay(pen, layer, item, time, start, theme, x0, y0, episode_dir)
     image = Image.alpha_composite(image, layer)
     return np.asarray(image.convert("RGB"), np.float32)
 
@@ -524,7 +553,7 @@ def _draw_text(layer, item, u, start, theme, x0, y0):
         words = words[:typewriter_count(item["text"], local, float(item.get("word_seconds") or 0.2))]
         if not words:
             return
-    lines = words
+    lines = [" ".join(words)] if item.get("layout") == "line" else words
     anchor = _map(theme, item["x"], item["y"], x0, y0)
     slide = 0.0
     if item["entrance"] == "slide":
@@ -708,6 +737,7 @@ def _layers(raw: dict, index: int) -> list[dict]:
     if not isinstance(layers, list) or not layers:
         raise EpisodeError(f"scene {index}: image scenes need image: or a layers list")
     out = []
+    ids = set()
     for i, layer in enumerate(layers):
         if isinstance(layer, str):
             layer = {"src": layer}
@@ -721,8 +751,13 @@ def _layers(raw: dict, index: int) -> list[dict]:
         if not isinstance(prompt, str):
             raise EpisodeError(f"scene {index}: layer prompt must be a string")
         parsed = {"src": layer["src"], "depth": depth, "prompt": prompt.strip()}
-        if layer.get("tracks"):
-            parsed["tracks"] = parse_tracks(layer.get("tracks"), index, 4.0)
+        parsed.update(parse_fragment(layer, index))
+        if "id" in parsed:
+            if parsed["id"] in ids:
+                raise EpisodeError(f"scene {index}: duplicate layer id {parsed['id']}")
+            ids.add(parsed["id"])
+        if raw.get("composition") == "collage" and ("id" not in parsed or "role" not in parsed):
+            raise EpisodeError(f"scene {index}: collage layers need id and role")
         out.append(parsed)
     return out
 
@@ -778,8 +813,17 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
             )
         kind = item["kind"]
         parsed = {"kind": kind, "color": _color(item.get("color"), index, MEASURED_RED if kind != "highlighter" else (185, 168, 10))}
+        if item.get("parent") is not None:
+            if not isinstance(item["parent"], str) or not item["parent"].strip():
+                raise EpisodeError(f"scene {index}: invalid overlay parent")
+            parsed["parent"] = item["parent"]
+        if item.get("clock", "scene") not in ("scene", "episode"):
+            raise EpisodeError(f"scene {index}: overlay clock must be scene or episode")
+        if "clock" in item: parsed["clock"] = item["clock"]
+        if parsed.get("clock") == "episode" and item.get("at") is None:
+            raise EpisodeError(f"scene {index}: episode-clock overlay requires explicit at")
         if item.get("at") is not None:
-            parsed["at"] = _seconds(item.get("at"), index, "at")
+            parsed["at"] = _num(item["at"], index, "at", 0, 600 if parsed.get("clock") == "episode" else 30)
         elif item.get("keyword") is not None:
             if not isinstance(item["keyword"], str) or not item["keyword"].strip():
                 raise EpisodeError(f"scene {index}: overlay keyword must be a word from the spoken line")
@@ -795,6 +839,9 @@ def _overlays(raw, index: int, rules: dict, fade_s: float) -> list[dict]:
                 raise EpisodeError(
                     f"scene {index}: text entrance must be fade, pop, slide, or typewriter; font must be serif or sans"
                 )
+            if item.get("layout", "stack") not in ("stack", "line"):
+                raise EpisodeError(f"scene {index}: text layout must be stack or line")
+            if "layout" in item: parsed["layout"] = item["layout"]
             parsed.update(text=item["text"], entrance=entrance, font=font,
                           size=_num(item.get("size", rules["text_size"]), index, "size", 12, 480),
                           fade=_fade_seconds(item.get("text_fade_s", fade_s), index),

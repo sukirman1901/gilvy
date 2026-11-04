@@ -50,7 +50,8 @@ mcp = FastMCP(
         "House rules constrain authored episodes, not descriptions of supplied references. "
         "Green is one quantity. Captions stay white. Do not restyle the canvas. "
         "Opt-in style: vox-explainer and style: history-story are image-plate exceptions. "
-        "Call reference_styles, then asset_manifest, generate every missing plate, then render and qc. "
+        "Call reference_styles; for cutout/paper/photo compositions read collage_notes before authoring. "
+        "Plan asset roles and object handoffs, then asset_manifest, native proof, render and qc. "
         "analyze_reference also lists soft_transitions (dissolve candidates). They do not split scenes "
         "until you pass scene_boundaries."
     ),
@@ -357,9 +358,19 @@ def reference_styles() -> str:
 
 
 @mcp.tool()
+def collage_notes() -> str:
+    """Read editorial collage composition, asset semantics, fragment clocks and attached annotations."""
+    return (_DIRECTING.parent / "COLLAGE.md").read_text(encoding="utf-8")
+
+
+@mcp.tool()
 def asset_manifest(episode_path: str, reference: str = "", refs_out: str = "",
                     frames: int = 4, per_shot: bool = False) -> str:
-    """List image plates an episode must generate before render, with style prompts.
+    """List image assets before render, with style/fragment prompts and file checks.
+
+    Collage keeps scene briefs separate from per-layer prompts and returns
+    explicit roles, placement and alpha integrity; full-frame histogram QC is
+    not a meaningful comparison for isolated fragments. Read collage_notes.
 
     Pass a local reference video to extract style frames. frames sets how many
     (1..32). per_shot grabs the midpoint of each image scene and QCs that plate

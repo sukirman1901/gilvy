@@ -229,6 +229,7 @@ def run(argv: list[str] | None = None) -> int:
     serve_product = sub.add_parser("serve-product", help="local frame-seeking viewer (silent)")
     serve_product.add_argument("spec")
     serve_product.add_argument("--port", type=int, default=8765)
+    sub.add_parser("collage-notes", help="read editorial collage asset and motion contract")
     sub.add_parser("product-notes", help="read product motion schema and directing guidance")
 
     sub.add_parser("elements", help="list composable visual elements and their verbs")
@@ -269,6 +270,9 @@ def run(argv: list[str] | None = None) -> int:
                 pass
             finally:
                 server.server_close()
+            return 0
+        if args.command == "collage-notes":
+            print(Path(__file__).with_name("COLLAGE.md").read_text(encoding="utf-8"))
             return 0
         if args.command == "product-notes":
             from gilvy.product import product_notes

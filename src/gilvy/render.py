@@ -96,7 +96,7 @@ class RenderState:
     def picture(self, index: int, u: float) -> np.ndarray:
         scene = self.scenes[index]
         if scene["type"] == "image":
-            return render_image_frame(self.theme, scene, max(0.0, u), self.durations[index], self.episode_dir)
+            return render_image_frame(self.theme, scene, max(0.0, u), self.durations[index], self.episode_dir, scene_start=float(self.starts[index]), episode_time=float(self.starts[index]+u))
         return compose(self.paint(index, u))
 
     def frame_array(self, n: int) -> np.ndarray:
@@ -627,7 +627,8 @@ def write_timeline(episode: Episode, state: RenderState, dest: Path, tts_name: s
                 "vo_overrun": scene.vo_overrun,
                 **_vo_extent(episode, i, scene, state),
                 **(
-                    {"camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
+                    {"composition": scene.params.get("composition", "plate"),
+                     "camera": camera_metrics(scene.params["camera"], float(state.durations[i])),
                      "transition_out": scene.params.get("transition_out", "cut")}
                     if scene.type == "image" else {}
                 ),
